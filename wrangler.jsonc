@@ -12,9 +12,10 @@
     "directory": ".",
     "binding": "ASSETS",
     "run_worker_first": [
-      "/api/*"
-    ]
-  },
+  "/api/*",
+  "/admin",
+  "/admin.html"
+]
 
   "d1_databases": [
     {
