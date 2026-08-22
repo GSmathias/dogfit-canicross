@@ -48,7 +48,9 @@ function isAuthorized(request, env) {
 
   const authorization = request.headers.get("Authorization");
 
-  if (!authorization?.startsWith("Basic ")) return false;
+  if (!authorization || !authorization.startsWith("Basic ")) {
+    return false;
+  }
 
   try {
     const credentials = atob(authorization.slice(6));
@@ -65,6 +67,18 @@ function isAuthorized(request, env) {
   }
 }
 
+function getNumericId(path, prefix) {
+  if (!path.startsWith(prefix)) return null;
+
+  const value = path.slice(prefix.length);
+
+  if (!value || value.includes("/")) return null;
+
+  const id = Number(value);
+
+  return Number.isInteger(id) && id > 0 ? String(id) : null;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -72,11 +86,11 @@ export default {
     const method = request.method;
 
     try {
-      if (path === "/admin") {
-        return Response.redirect(`${url.origin}/admin.html`, 302);
+      if (path === "/admin.html") {
+        return Response.redirect(url.origin + "/admin", 302);
       }
 
-      if (path === "/admin.html") {
+      if (path === "/admin") {
         if (!isAuthorized(request, env)) return unauthorized();
         return env.ASSETS.fetch(request);
       }
@@ -91,7 +105,10 @@ export default {
 
       if (path.startsWith("/api/admin/")) {
         if (!env.ADMIN_PASSWORD) {
-          return jsonError("Senha administrativa ainda não configurada.", 503);
+          return jsonError(
+            "Senha administrativa ainda não configurada.",
+            503
+          );
         }
 
         if (!isAuthorized(request, env)) return unauthorized();
@@ -116,17 +133,30 @@ export default {
           }
         }
 
-        const productMatch = path.match(/^\/api\/admin\/products\/(\d+)$/);
+        const productId = getNumericId(
+          path,
+          "/api/admin/products/"
+        );
 
-        if (productMatch) {
-          const params = { id: productMatch[1] };
+        if (productId) {
+          const params = { id: productId };
 
           if (method === "PUT") {
-            return updateAdminProduct({ request, env, ctx, params });
+            return updateAdminProduct({
+              request,
+              env,
+              ctx,
+              params
+            });
           }
 
           if (method === "DELETE") {
-            return deleteAdminProduct({ request, env, ctx, params });
+            return deleteAdminProduct({
+              request,
+              env,
+              ctx,
+              params
+            });
           }
         }
 
@@ -140,14 +170,17 @@ export default {
           }
         }
 
-        const galleryMatch = path.match(/^\/api\/admin\/gallery\/(\d+)$/);
+        const galleryId = getNumericId(
+          path,
+          "/api/admin/gallery/"
+        );
 
-        if (galleryMatch && method === "DELETE") {
+        if (galleryId && method === "DELETE") {
           return deleteGalleryItem({
             request,
             env,
             ctx,
-            params: { id: galleryMatch[1] }
+            params: { id: galleryId }
           });
         }
 
@@ -158,7 +191,10 @@ export default {
           );
         }
 
-        return jsonError("Rota administrativa não encontrada.", 404);
+        return jsonError(
+          "Rota administrativa não encontrada.",
+          404
+        );
       }
 
       if (path.startsWith("/api/")) {
