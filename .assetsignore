@@ -12,3 +12,4 @@ wrangler.jsonc
 wrangler.jsonc.example
 .gitignore
 .assetsignore
+worker.js
