@@ -1,0 +1,14 @@
+.git
+.git/**
+.wrangler
+.wrangler/**
+functions
+functions/**
+migrations
+migrations/**
+LEIA-ME*
+README*
+wrangler.jsonc
+wrangler.jsonc.example
+.gitignore
+.assetsignore

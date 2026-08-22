@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dogfit-canicross",
+  "compatibility_date": "2026-08-22",
+
+  "observability": {
+    "enabled": true
+  },
+
+  "assets": {
+    "directory": "."
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dogfit-db",
+      "database_id": "f8b62441-627a-4f85-8fcc-dfc357ffe111"
+    }
+  ]
+}
