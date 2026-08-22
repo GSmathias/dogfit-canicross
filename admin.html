@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Admin | DOGFIT CANICROSS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+  <div class="admin-shell">
+    <aside class="sidebar">
+      <a class="admin-brand" href="index.html">
+        <strong>DOGFIT</strong>
+        <span>ADMIN</span>
+      </a>
+
+      <nav class="admin-nav">
+        <button class="nav-item active" data-view="dashboard">Visão geral</button>
+        <button class="nav-item" data-view="products">Produtos</button>
+        <button class="nav-item" data-view="event">Próximo evento</button>
+        <button class="nav-item" data-view="home">Home e Clube</button>
+        <button class="nav-item" data-view="performance">DOGFIT Performance</button>
+        <button class="nav-item" data-view="walker">Passeador de Cães</button>
+        <button class="nav-item" data-view="gallery">Galeria</button>
+        <button class="nav-item" data-view="preview">Prévia do site</button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <a href="index.html" target="_blank">Abrir site ↗</a>
+        <small>Área administrativa DOGFIT</small>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">DOGFIT CANICROSS</p>
+          <h1 id="viewTitle">Visão geral</h1>
+        </div>
+        <div class="topbar-actions">
+          <span id="modeBadge" class="mode-badge">Carregando...</span>
+          <button id="mobileMenu" class="mobile-menu">Menu</button>
+        </div>
+      </header>
+
+      <section id="dashboardView" class="view active">
+        <div class="notice" id="localNotice">
+          <strong>Modo local.</strong>
+          As alterações ficam neste navegador enquanto testamos com o Live Server.
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card">
+            <span>Produtos</span>
+            <strong id="statProducts">0</strong>
+            <small>cadastrados</small>
+          </article>
+          <article class="stat-card">
+            <span>Em destaque</span>
+            <strong id="statFeatured">0</strong>
+            <small>produtos</small>
+          </article>
+          <article class="stat-card">
+            <span>Galeria</span>
+            <strong id="statGallery">0</strong>
+            <small>fotos</small>
+          </article>
+          <article class="stat-card">
+            <span>Próximo evento</span>
+            <strong class="event-stat" id="statEvent">—</strong>
+            <small id="statEventDate">sem data</small>
+          </article>
+        </div>
+
+        <div class="quick-grid">
+          <button class="quick-card" data-go="products">
+            <span>+</span>
+            <div>
+              <strong>Novo produto</strong>
+              <small>Foto, preço, categoria e estoque</small>
+            </div>
+          </button>
+
+          <button class="quick-card" data-go="event">
+            <span>✎</span>
+            <div>
+              <strong>Atualizar evento</strong>
+              <small>Data, vagas, preço e imagem</small>
+            </div>
+          </button>
+
+          <button class="quick-card" data-go="home">
+            <span>⌂</span>
+            <div>
+              <strong>Editar a Home</strong>
+              <small>Capa, textos e Clube DOGFIT</small>
+            </div>
+          </button>
+
+          <button class="quick-card" data-go="performance">
+            <span>⚡</span>
+            <div>
+              <strong>Performance</strong>
+              <small>Foto, atividades e informações</small>
+            </div>
+          </button>
+
+          <button class="quick-card" data-go="walker">
+            <span>🐕</span>
+            <div>
+              <strong>Passeador de Cães</strong>
+              <small>Planos, preços, foto e WhatsApp</small>
+            </div>
+          </button>
+
+          <button class="quick-card" data-go="preview">
+            <span>◉</span>
+            <div>
+              <strong>Ver como ficou</strong>
+              <small>Prévia do site no painel</small>
+            </div>
+          </button>
+        </div>
+      </section>
+
+      <section id="productsView" class="view">
+        <div class="section-toolbar">
+          <div>
+            <h2>Produtos</h2>
+            <p>Controle o que aparece no site sem mexer no código.</p>
+          </div>
+          <button class="btn btn-primary" id="newProductBtn">+ Novo produto</button>
+        </div>
+
+        <div class="filters-bar">
+          <input id="productSearch" placeholder="Buscar produto...">
+          <select id="categoryFilter">
+            <option value="">Todas as categorias</option>
+            <option>Guia</option>
+            <option>Cinto</option>
+            <option>Arnês</option>
+            <option>Kit</option>
+            <option>Vestuário</option>
+            <option>Acessório</option>
+            <option>Outros</option>
+          </select>
+        </div>
+
+        <div id="productsList" class="product-list"></div>
+
+        <div class="editor-card hidden" id="productEditor">
+          <div class="editor-head">
+            <div>
+              <p class="eyebrow">PRODUTO</p>
+              <h3 id="productEditorTitle">Novo produto</h3>
+            </div>
+            <button class="icon-btn" id="closeProductEditor" aria-label="Fechar">×</button>
+          </div>
+
+          <form id="productForm" class="form-grid">
+            <input type="hidden" id="productId">
+
+            <label class="field field-wide">
+              <span>Nome do produto</span>
+              <input id="productName" required maxlength="90" placeholder="Ex.: Guia Elástica DOGFIT">
+            </label>
+
+            <label class="field">
+              <span>Categoria</span>
+              <select id="productCategory">
+                <option>Guia</option>
+                <option>Cinto</option>
+                <option>Arnês</option>
+                <option>Kit</option>
+                <option>Vestuário</option>
+                <option>Acessório</option>
+                <option>Outros</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Disponibilidade</span>
+              <select id="productStockStatus">
+                <option value="available">Disponível</option>
+                <option value="preorder">Sob encomenda</option>
+                <option value="soldout">Esgotado</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Preço normal</span>
+              <input id="productPrice" inputmode="decimal" placeholder="50,00">
+            </label>
+
+            <label class="field">
+              <span>Preço Clube DOGFIT <small>(opcional)</small></span>
+              <input id="productClubPrice" inputmode="decimal" placeholder="35,00">
+            </label>
+
+            <label class="field">
+              <span>Selo <small>(opcional)</small></span>
+              <input id="productBadge" maxlength="22" placeholder="NOVO, PROMOÇÃO...">
+            </label>
+
+            <label class="field">
+              <span>Ordem de exibição</span>
+              <input id="productSortOrder" type="number" min="0" value="0">
+            </label>
+
+            <label class="field field-wide">
+              <span>Descrição</span>
+              <textarea id="productDescription" rows="4" maxlength="500" placeholder="Descrição curta do produto"></textarea>
+            </label>
+
+            <div class="field field-wide">
+              <span>Foto</span>
+              <div class="upload-box">
+                <input type="file" id="productImageFile" accept="image/*">
+                <div class="image-preview" id="productImagePreview">
+                  <span>Nenhuma foto selecionada</span>
+                </div>
+              </div>
+              <input type="hidden" id="productImageUrl">
+            </div>
+
+            <div class="toggles-row field-wide">
+              <label class="toggle-field">
+                <input type="checkbox" id="productActive" checked>
+                <span>Visível no site</span>
+              </label>
+
+              <label class="toggle-field">
+                <input type="checkbox" id="productFeatured">
+                <span>Produto em destaque</span>
+              </label>
+            </div>
+
+            <div class="form-actions field-wide">
+              <button type="button" class="btn btn-ghost" id="cancelProduct">Cancelar</button>
+              <button type="submit" class="btn btn-primary">Salvar produto</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="eventView" class="view">
+        <div class="section-toolbar">
+          <div>
+            <h2>Próximo evento</h2>
+            <p>Atualize todas as informações exibidas na Home.</p>
+          </div>
+        </div>
+
+        <form id="eventForm" class="editor-card form-grid no-top-margin">
+          <label class="field field-wide">
+            <span>Nome do evento</span>
+            <input id="eventTitle" placeholder="DOGFIT CANICROSS EXPERIENCE">
+          </label>
+
+          <label class="field">
+            <span>Local</span>
+            <input id="eventLocation" placeholder="Anápolis - GO">
+          </label>
+
+          <label class="field">
+            <span>Data</span>
+            <input id="eventDate" type="date">
+          </label>
+
+          <label class="field">
+            <span>Horário</span>
+            <input id="eventTime" type="time">
+          </label>
+
+          <label class="field">
+            <span>Vagas</span>
+            <input id="eventSlots" type="number" min="0" placeholder="18">
+          </label>
+
+          <label class="field">
+            <span>Valor</span>
+            <input id="eventPrice" inputmode="decimal" placeholder="35,00">
+          </label>
+
+          <label class="field">
+            <span>Status</span>
+            <select id="eventStatus">
+              <option value="open">Inscrições abertas</option>
+              <option value="soon">Em breve</option>
+              <option value="soldout">Esgotado</option>
+            </select>
+          </label>
+
+          <label class="field field-wide">
+            <span>Mensagem do WhatsApp</span>
+            <input id="eventWhatsappMessage" placeholder="Olá! Quero me inscrever no próximo evento da DOGFIT.">
+          </label>
+
+          <div class="field field-wide">
+            <span>Foto do evento</span>
+            <div class="upload-box">
+              <input type="file" id="eventImageFile" accept="image/*">
+              <div class="image-preview landscape" id="eventImagePreview">
+                <span>Nenhuma foto selecionada</span>
+              </div>
+            </div>
+            <input type="hidden" id="eventImageUrl">
+          </div>
+
+          <div class="form-actions field-wide">
+            <button type="submit" class="btn btn-primary">Salvar evento</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="homeView" class="view">
+        <div class="section-toolbar">
+          <div>
+            <h2>Home e Clube</h2>
+            <p>Personalize a página principal sem editar o HTML.</p>
+          </div>
+        </div>
+
+        <form id="homeForm" class="editor-card form-grid no-top-margin">
+          <div class="form-divider field-wide">
+            <span>CAPA DO SITE</span>
+          </div>
+
+          <label class="field field-wide">
+            <span>Frase pequena</span>
+            <input id="heroEyebrow" maxlength="100">
+          </label>
+
+          <label class="field field-wide">
+            <span>Título principal</span>
+            <textarea id="heroTitle" rows="2" maxlength="180"></textarea>
+          </label>
+
+          <label class="field field-wide">
+            <span>Texto principal</span>
+            <textarea id="heroText" rows="3" maxlength="400"></textarea>
+          </label>
+
+          <div class="field field-wide">
+            <span>Foto de capa</span>
+            <div class="upload-box">
+              <input type="file" id="heroImageFile" accept="image/*">
+              <div class="image-preview hero-preview" id="heroImagePreview">
+                <span>Nenhuma foto de capa selecionada</span>
+              </div>
+            </div>
+            <input type="hidden" id="heroImageUrl">
+          </div>
+          <div class="field field-wide">
+            <span>Foto lateral da capa</span>
+            <div class="upload-box">
+              <input type="file" id="heroSideImageFile" accept="image/*">
+              <div class="image-preview landscape" id="heroSideImagePreview">
+                <span>Nenhuma foto lateral selecionada</span>
+              </div>
+            </div>
+            <input type="hidden" id="heroSideImageUrl">
+          </div>
+
+          <div class="form-divider field-wide">
+            <span>CLUBE DOGFIT</span>
+          </div>
+
+          <label class="field field-wide">
+            <span>Título do Clube</span>
+            <input id="clubTitle" maxlength="120" placeholder="MAIS EXPERIÊNCIAS. MAIS BENEFÍCIOS.">
+          </label>
+
+          <label class="field field-wide">
+            <span>Descrição do Clube</span>
+            <textarea id="clubText" rows="4" maxlength="600"></textarea>
+          </label>
+
+          <label class="field field-wide">
+            <span>Benefícios <small>um por linha</small></span>
+            <textarea id="clubBenefits" rows="6" placeholder="Eventos com condições especiais&#10;Desconto em produtos&#10;Benefícios exclusivos"></textarea>
+          </label>
+
+          <div class="field field-wide">
+            <span>Foto dos benefícios do Clube</span>
+            <div class="upload-box">
+              <input type="file" id="clubImageFile" accept="image/*">
+              <div class="image-preview landscape" id="clubImagePreview">
+                <span>Nenhuma foto selecionada</span>
+              </div>
+            </div>
+            <input type="hidden" id="clubImageUrl">
+          </div>
+
+          <div class="form-divider field-wide">
+            <span>SOBRE A DOGFIT</span>
+          </div>
+
+          <label class="field field-wide">
+            <span>Texto sobre a DOGFIT</span>
+            <textarea id="aboutText" rows="6" maxlength="1200"></textarea>
+          </label>
+
+          <div class="form-actions field-wide">
+            <button type="submit" class="btn btn-primary">Salvar Home</button>
+          </div>
+        </form>
+      </section>
+
+
+      <section id="performanceView" class="view">
+        <div class="section-toolbar">
+          <div>
+            <h2>DOGFIT Performance</h2>
+            <p>Edite como o serviço Performance aparece no site.</p>
+          </div>
+        </div>
+
+        <form id="performanceForm" class="editor-card form-grid no-top-margin">
+          <label class="field field-wide">
+            <span>Título</span>
+            <input id="performanceTitle" maxlength="140">
+          </label>
+
+          <label class="field field-wide">
+            <span>Descrição</span>
+            <textarea id="performanceText" rows="4" maxlength="700"></textarea>
+          </label>
+
+          <label class="field field-wide">
+            <span>Atividades <small>uma por linha</small></span>
+            <textarea id="performanceActivities" rows="5" placeholder="CORRIDA&#10;TRAÇÃO&#10;SALTOS"></textarea>
+          </label>
+
+          <label class="field field-wide">
+            <span>Observação</span>
+            <textarea id="performanceNote" rows="3" maxlength="500"></textarea>
+          </label>
+
+          <label class="field field-wide">
+            <span>Mensagem do WhatsApp</span>
+            <input id="performanceWhatsappMessage" maxlength="250">
+          </label>
+
+          <div class="field field-wide">
+            <span>Foto do Performance</span>
+            <div class="upload-box">
+              <input type="file" id="performanceImageFile" accept="image/*">
+              <div class="image-preview landscape" id="performanceImagePreview">
+                <span>Nenhuma foto selecionada</span>
+              </div>
+            </div>
+            <input type="hidden" id="performanceImageUrl">
+          </div>
+
+          <label class="toggle-field field-wide">
+            <input type="checkbox" id="performanceActive" checked>
+            <span>Mostrar DOGFIT Performance no site</span>
+          </label>
+
+          <div class="form-actions field-wide">
+            <button type="submit" class="btn btn-primary">Salvar Performance</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="walkerView" class="view">
+        <div class="section-toolbar">
+          <div>
+            <h2>Passeador de Cães</h2>
+            <p>Controle apresentação, foto, planos e valores do serviço.</p>
+          </div>
+          <button class="btn btn-primary" id="addWalkerPlan" type="button">+ Adicionar plano</button>
+        </div>
+
+        <form id="walkerForm" class="editor-card form-grid no-top-margin">
+          <label class="field field-wide">
+            <span>Título</span>
+            <input id="walkerTitle" maxlength="140">
+          </label>
+
+          <label class="field field-wide">
+            <span>Descrição</span>
+            <textarea id="walkerText" rows="4" maxlength="700"></textarea>
+          </label>
+
+          <div class="field field-wide">
+            <span>Foto do serviço</span>
+            <div class="upload-box">
+              <input type="file" id="walkerImageFile" accept="image/*">
+              <div class="image-preview landscape" id="walkerImagePreview">
+                <span>Nenhuma foto selecionada</span>
+              </div>
+            </div>
+            <input type="hidden" id="walkerImageUrl">
+          </div>
+
+          <div class="form-divider field-wide">
+            <span>PLANOS E VALORES</span>
+          </div>
+
+          <div id="walkerPlansEditor" class="service-plans-editor field-wide"></div>
+
+          <label class="field field-wide">
+            <span>Observação abaixo dos planos</span>
+            <input id="walkerNote" maxlength="300">
+          </label>
+
+          <label class="field field-wide">
+            <span>Mensagem do WhatsApp</span>
+            <input id="walkerWhatsappMessage" maxlength="250">
+          </label>
+
+          <label class="toggle-field field-wide">
+            <input type="checkbox" id="walkerActive" checked>
+            <span>Mostrar Passeador de Cães no site</span>
+          </label>
+
+          <div class="form-actions field-wide">
+            <button type="submit" class="btn btn-primary">Salvar Passeador</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="galleryView" class="view">
+        <div class="section-toolbar">
+          <div>
+            <h2>Galeria</h2>
+            <p>Adicione e remova fotos dos eventos DOGFIT.</p>
+          </div>
+        </div>
+
+        <form id="galleryForm" class="editor-card compact-form no-top-margin">
+          <label class="field">
+            <span>Selecionar foto</span>
+            <input type="file" id="galleryFile" accept="image/*" required>
+          </label>
+
+          <label class="field grow">
+            <span>Legenda <small>(opcional)</small></span>
+            <input id="galleryCaption" maxlength="150" placeholder="Ex.: Canicross no Parque dos Pirineus">
+          </label>
+
+          <button class="btn btn-primary" type="submit">Adicionar foto</button>
+        </form>
+
+        <div id="galleryList" class="gallery-admin-grid"></div>
+      </section>
+
+      <section id="previewView" class="view">
+        <div class="section-toolbar">
+          <div>
+            <h2>Prévia do site</h2>
+            <p>Confira as alterações sem sair do painel.</p>
+          </div>
+          <button class="btn btn-primary" id="refreshPreview">Atualizar prévia</button>
+        </div>
+
+        <div class="preview-device">
+          <div class="preview-bar">
+            <span></span><span></span><span></span>
+            <strong>dogfitcanicross.com.br</strong>
+          </div>
+          <iframe id="sitePreview" src="index.html" title="Prévia do site DOGFIT"></iframe>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="js/admin.js"></script>
+</body>
+</html>

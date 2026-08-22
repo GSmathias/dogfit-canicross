@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dogfit-canicross",
+  "compatibility_date": "2026-08-19",
+  "pages_build_output_dir": ".",
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dogfit-db",
+      "database_id": "COLE_AQUI_O_DATABASE_ID"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "dogfit-media"
+    }
+  ]
+}
