@@ -1,5 +1,7 @@
 import { onRequestGet as getContent } from "./functions/api/content.js";
 import { onRequestGet as getProducts } from "./functions/api/products.js";
+import { onRequestGet as getMedia } from "./functions/media/[key].js";
+import { onRequestPost as uploadMedia } from "./functions/api/admin/upload.js";
 
 import {
   onRequestGet as getAdminContent,
@@ -47,15 +49,11 @@ function isAuthorized(request, env) {
   if (!env.ADMIN_PASSWORD) return false;
 
   const authorization = request.headers.get("Authorization");
-
-  if (!authorization || !authorization.startsWith("Basic ")) {
-    return false;
-  }
+  if (!authorization?.startsWith("Basic ")) return false;
 
   try {
     const credentials = atob(authorization.slice(6));
     const separator = credentials.indexOf(":");
-
     if (separator < 0) return false;
 
     const username = credentials.slice(0, separator);
@@ -67,18 +65,6 @@ function isAuthorized(request, env) {
   }
 }
 
-function getNumericId(path, prefix) {
-  if (!path.startsWith(prefix)) return null;
-
-  const value = path.slice(prefix.length);
-
-  if (!value || value.includes("/")) return null;
-
-  const id = Number(value);
-
-  return Number.isInteger(id) && id > 0 ? String(id) : null;
-}
-
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -86,8 +72,8 @@ export default {
     const method = request.method;
 
     try {
-      if (path === "/admin.html") {
-        return Response.redirect(url.origin + "/admin", 302);
+      if (path === "/admin.html" || path === "/admin/") {
+        return Response.redirect(`${url.origin}/admin`, 302);
       }
 
       if (path === "/admin") {
@@ -101,6 +87,18 @@ export default {
 
       if (method === "GET" && path === "/api/products") {
         return getProducts({ request, env, ctx });
+      }
+
+      if (method === "GET" && path.startsWith("/media/")) {
+        const key = path.slice("/media/".length);
+        if (!key) return new Response("Not found", { status: 404 });
+
+        return getMedia({
+          request,
+          env,
+          ctx,
+          params: { key }
+        });
       }
 
       if (path.startsWith("/api/admin/")) {
@@ -133,30 +131,19 @@ export default {
           }
         }
 
-        const productId = getNumericId(
-          path,
-          "/api/admin/products/"
+        const productMatch = path.match(
+          /^\/api\/admin\/products\/(\d+)$/
         );
 
-        if (productId) {
-          const params = { id: productId };
+        if (productMatch) {
+          const params = { id: productMatch[1] };
 
           if (method === "PUT") {
-            return updateAdminProduct({
-              request,
-              env,
-              ctx,
-              params
-            });
+            return updateAdminProduct({ request, env, ctx, params });
           }
 
           if (method === "DELETE") {
-            return deleteAdminProduct({
-              request,
-              env,
-              ctx,
-              params
-            });
+            return deleteAdminProduct({ request, env, ctx, params });
           }
         }
 
@@ -170,31 +157,24 @@ export default {
           }
         }
 
-        const galleryId = getNumericId(
-          path,
-          "/api/admin/gallery/"
+        const galleryMatch = path.match(
+          /^\/api\/admin\/gallery\/(\d+)$/
         );
 
-        if (galleryId && method === "DELETE") {
+        if (galleryMatch && method === "DELETE") {
           return deleteGalleryItem({
             request,
             env,
             ctx,
-            params: { id: galleryId }
+            params: { id: galleryMatch[1] }
           });
         }
 
-        if (path === "/api/admin/upload") {
-          return jsonError(
-            "Upload de imagens temporariamente indisponível.",
-            503
-          );
+        if (path === "/api/admin/upload" && method === "POST") {
+          return uploadMedia({ request, env, ctx });
         }
 
-        return jsonError(
-          "Rota administrativa não encontrada.",
-          404
-        );
+        return jsonError("Rota administrativa não encontrada.", 404);
       }
 
       if (path.startsWith("/api/")) {

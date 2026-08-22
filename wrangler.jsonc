@@ -13,6 +13,7 @@
     "binding": "ASSETS",
     "run_worker_first": [
       "/api/*",
+      "/media/*",
       "/admin",
       "/admin.html"
     ]
@@ -23,6 +24,13 @@
       "binding": "DB",
       "database_name": "dogfit-db",
       "database_id": "f8b62441-627a-4f85-8fcc-dfc357ffe111"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "dogfit-media"
     }
   ]
 }
