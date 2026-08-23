@@ -2,6 +2,11 @@ import { onRequestGet as getContent } from "./functions/api/content.js";
 import { onRequestGet as getProducts } from "./functions/api/products.js";
 import { onRequestGet as getMedia } from "./functions/media/[key].js";
 import { onRequestPost as uploadMedia } from "./functions/api/admin/upload.js";
+import {
+  handleAdminClub,
+  handlePartner,
+  handlePublicClub
+} from "./functions/api/club.js";
 
 import {
   onRequestGet as getAdminContent,
@@ -65,6 +70,12 @@ function isAuthorized(request, env) {
   }
 }
 
+function assetRequest(request, pathname) {
+  const url = new URL(request.url);
+  url.pathname = pathname;
+  return new Request(url, request);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -81,12 +92,41 @@ export default {
         return env.ASSETS.fetch(request);
       }
 
+      if (path === "/club-admin.html" || path === "/club-admin/") {
+        return Response.redirect(`${url.origin}/club-admin`, 302);
+      }
+
+      if (path === "/club-admin") {
+        if (!isAuthorized(request, env)) return unauthorized();
+        return env.ASSETS.fetch(assetRequest(request, "/club-admin.html"));
+      }
+
+      if (path === "/parceiro.html" || path === "/parceiro/") {
+        return Response.redirect(`${url.origin}/parceiro`, 302);
+      }
+
+      if (path === "/parceiro") {
+        return env.ASSETS.fetch(assetRequest(request, "/partner.html"));
+      }
+
+      if (/^\/clube\/[a-f0-9-]{36}$/i.test(path)) {
+        return env.ASSETS.fetch(assetRequest(request, "/member-card.html"));
+      }
+
       if (method === "GET" && path === "/api/content") {
         return getContent({ request, env, ctx });
       }
 
       if (method === "GET" && path === "/api/products") {
         return getProducts({ request, env, ctx });
+      }
+
+      if (path.startsWith("/api/club/")) {
+        return handlePublicClub({ request, env, ctx, path, method });
+      }
+
+      if (path.startsWith("/api/partner/")) {
+        return handlePartner({ request, env, ctx, path, method });
       }
 
       if (method === "GET" && path.startsWith("/media/")) {
@@ -110,6 +150,10 @@ export default {
         }
 
         if (!isAuthorized(request, env)) return unauthorized();
+
+        if (path.startsWith("/api/admin/club/")) {
+          return handleAdminClub({ request, env, ctx, path, method });
+        }
 
         if (path === "/api/admin/content") {
           if (method === "GET") {

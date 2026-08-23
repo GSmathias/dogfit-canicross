@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Gestão do Clube | DOGFIT CANICROSS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="css/club-admin.css">
+</head>
+<body>
+  <div class="admin-shell">
+    <aside class="sidebar">
+      <a class="admin-brand" href="/">
+        <strong>DOGFIT</strong>
+        <span>CLUBE ADMIN</span>
+      </a>
+      <nav class="admin-nav club-nav">
+        <button class="nav-item active" data-view="overview">Visão geral</button>
+        <button class="nav-item" data-view="members">Associados</button>
+        <button class="nav-item" data-view="partners">Parceiros</button>
+        <button class="nav-item" data-view="benefits">Benefícios</button>
+        <button class="nav-item" data-view="coupons">Cupons</button>
+        <button class="nav-item" data-view="redemptions">Utilizações</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <a href="/admin">← Administração do site</a>
+        <a href="/parceiro" target="_blank">Portal do parceiro ↗</a>
+        <a href="/" target="_blank">Abrir site ↗</a>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">DOGFIT CANICROSS</p>
+          <h1 id="viewTitle">Gestão do Clube</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="mode-badge">Banco D1 protegido</span>
+          <button id="mobileMenu" class="mobile-menu" type="button">Menu</button>
+        </div>
+      </header>
+
+      <section id="overviewView" class="club-view active">
+        <div class="notice">
+          <strong>Central do Clube.</strong> Cadastre associados, parceiros, benefícios e cupons. Toda utilização feita por parceiro fica registrada.
+        </div>
+        <div class="stats-grid club-stats">
+          <article class="stat-card"><span>Associados</span><strong id="statMembers">0</strong><small>cadastrados</small></article>
+          <article class="stat-card"><span>Ativos</span><strong id="statActiveMembers">0</strong><small>com pagamento em dia</small></article>
+          <article class="stat-card"><span>Parceiros</span><strong id="statPartners">0</strong><small>com acesso ativo</small></article>
+          <article class="stat-card"><span>Uso no mês</span><strong id="statRedemptions">0</strong><small>benefícios e cupons</small></article>
+        </div>
+        <div class="quick-grid club-quick">
+          <button class="quick-card" data-go="members"><span>+</span><div><strong>Novo associado</strong><small>Cadastro e carteirinha</small></div></button>
+          <button class="quick-card" data-go="partners"><span>⌂</span><div><strong>Novo parceiro</strong><small>Acesso limitado e seguro</small></div></button>
+          <button class="quick-card" data-go="coupons"><span>%</span><div><strong>Criar cupom</strong><small>Regras e limites de uso</small></div></button>
+          <button class="quick-card" data-go="redemptions"><span>✓</span><div><strong>Ver utilizações</strong><small>Histórico de descontos</small></div></button>
+        </div>
+      </section>
+
+      <section id="membersView" class="club-view">
+        <div class="section-toolbar">
+          <div><h2>Associados</h2><p>Controle validade, pagamento e carteirinha digital.</p></div>
+          <button class="btn btn-primary" id="newMemberBtn" type="button">+ Novo associado</button>
+        </div>
+        <div class="filters-bar single-filter"><input id="memberSearch" placeholder="Buscar por nome, código ou cão..."></div>
+        <div id="membersList" class="data-list"></div>
+
+        <div class="editor-card hidden" id="memberEditor">
+          <div class="editor-head"><div><p class="eyebrow">ASSOCIADO</p><h3 id="memberEditorTitle">Novo associado</h3></div><button class="icon-btn" data-close="memberEditor" type="button">×</button></div>
+          <form id="memberForm" class="form-grid">
+            <input id="memberId" type="hidden">
+            <label class="field field-wide"><span>Nome completo</span><input id="memberName" maxlength="180" required></label>
+            <label class="field"><span>WhatsApp</span><input id="memberWhatsapp" maxlength="30" placeholder="(62) 99999-9999"></label>
+            <label class="field"><span>E-mail</span><input id="memberEmail" type="email" maxlength="180"></label>
+            <label class="field"><span>Nome do cão</span><input id="memberDog" maxlength="120"></label>
+            <label class="field"><span>Código <small>gerado automaticamente</small></span><input id="memberCode" maxlength="30" placeholder="DFC-XXXXXX"></label>
+            <label class="field"><span>Plano</span><input id="memberPlan" maxlength="120" value="Clube DOGFIT CANICROSS"></label>
+            <label class="field"><span>Mensalidade (R$)</span><input id="memberFee" inputmode="decimal" value="79,90"></label>
+            <label class="field"><span>Entrada no clube</span><input id="memberJoined" type="date"></label>
+            <label class="field"><span>Válido até</span><input id="memberValidUntil" type="date"></label>
+            <label class="field"><span>Pagamento</span><select id="memberPayment"><option value="paid">Pago</option><option value="pending">Pendente</option><option value="overdue">Atrasado</option></select></label>
+            <label class="field"><span>Status do cadastro</span><select id="memberStatus"><option value="active">Ativo</option><option value="inactive">Inativo</option></select></label>
+            <label class="field field-wide"><span>Observações internas</span><textarea id="memberNotes" rows="3" maxlength="1000"></textarea></label>
+            <div class="form-actions field-wide"><button class="btn btn-ghost" data-close="memberEditor" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Salvar associado</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section id="partnersView" class="club-view">
+        <div class="section-toolbar">
+          <div><h2>Empresas parceiras</h2><p>Cada empresa recebe seu próprio acesso ao portal.</p></div>
+          <button class="btn btn-primary" id="newPartnerBtn" type="button">+ Novo parceiro</button>
+        </div>
+        <div id="partnersList" class="data-list"></div>
+        <div class="editor-card hidden" id="partnerEditor">
+          <div class="editor-head"><div><p class="eyebrow">PARCEIRO</p><h3 id="partnerEditorTitle">Novo parceiro</h3></div><button class="icon-btn" data-close="partnerEditor" type="button">×</button></div>
+          <form id="partnerForm" class="form-grid">
+            <input id="partnerId" type="hidden">
+            <label class="field"><span>Nome da empresa</span><input id="partnerName" required maxlength="140" placeholder="Dogmania"></label>
+            <label class="field"><span>E-mail de acesso</span><input id="partnerEmail" required type="email" maxlength="180"></label>
+            <label class="field"><span>Senha de acesso <small id="partnerPasswordHint">mínimo 6 caracteres</small></span><input id="partnerAccessCode" type="password" minlength="6" autocomplete="new-password"></label>
+            <label class="toggle-field"><input id="partnerActive" type="checkbox" checked><span>Acesso ativo</span></label>
+            <div class="notice field-wide compact-notice">Envie ao parceiro o endereço <strong id="partnerPortalUrl">/parceiro</strong>, o e-mail e a senha cadastrada. Ele não terá acesso ao painel administrativo.</div>
+            <div class="form-actions field-wide"><button class="btn btn-ghost" data-close="partnerEditor" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Salvar parceiro</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section id="benefitsView" class="club-view">
+        <div class="section-toolbar">
+          <div><h2>Benefícios recorrentes</h2><p>Vantagens do plano que podem renovar por mês ou ano.</p></div>
+          <button class="btn btn-primary" id="newBenefitBtn" type="button">+ Novo benefício</button>
+        </div>
+        <div id="benefitsList" class="data-list"></div>
+        <div class="editor-card hidden" id="benefitEditor">
+          <div class="editor-head"><div><p class="eyebrow">BENEFÍCIO</p><h3 id="benefitEditorTitle">Novo benefício</h3></div><button class="icon-btn" data-close="benefitEditor" type="button">×</button></div>
+          <form id="benefitForm" class="form-grid">
+            <input id="benefitId" type="hidden">
+            <label class="field field-wide"><span>Título</span><input id="benefitTitle" required maxlength="160"></label>
+            <label class="field field-wide"><span>Descrição</span><textarea id="benefitDescription" rows="3" maxlength="700"></textarea></label>
+            <label class="field"><span>Responsável</span><select id="benefitPartner"><option value="">DOGFIT (sem parceiro)</option></select></label>
+            <label class="field"><span>Tipo</span><select id="benefitType"><option value="percentage">Desconto percentual</option><option value="fixed">Desconto em reais</option><option value="credit">Participação/serviço grátis</option><option value="item">Item grátis</option></select></label>
+            <label class="field"><span>Valor <small>% ou R$</small></span><input id="benefitValue" inputmode="decimal" value="0"></label>
+            <label class="field"><span>Renovação</span><select id="benefitPeriod"><option value="unlimited">Sem limite</option><option value="monthly">Mensal</option><option value="annual">Anual</option><option value="once">Uma única vez</option></select></label>
+            <label class="field"><span>Limite por período</span><input id="benefitLimit" type="number" min="1" placeholder="Sem limite"></label>
+            <label class="field"><span>Início <small>opcional</small></span><input id="benefitStart" type="date"></label>
+            <label class="field"><span>Fim <small>opcional</small></span><input id="benefitEnd" type="date"></label>
+            <label class="toggle-field"><input id="benefitActive" type="checkbox" checked><span>Benefício ativo</span></label>
+            <div class="form-actions field-wide"><button class="btn btn-ghost" data-close="benefitEditor" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Salvar benefício</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section id="couponsView" class="club-view">
+        <div class="section-toolbar">
+          <div><h2>Cupons de desconto</h2><p>Campanhas temporárias e cupons de uso único ou limitado.</p></div>
+          <button class="btn btn-primary" id="newCouponBtn" type="button">+ Novo cupom</button>
+        </div>
+        <div id="couponsList" class="data-list"></div>
+        <div class="editor-card hidden" id="couponEditor">
+          <div class="editor-head"><div><p class="eyebrow">CUPOM</p><h3 id="couponEditorTitle">Novo cupom</h3></div><button class="icon-btn" data-close="couponEditor" type="button">×</button></div>
+          <form id="couponForm" class="form-grid">
+            <input id="couponId" type="hidden">
+            <label class="field"><span>Código</span><input id="couponCode" required maxlength="40" placeholder="DOGMANIA5"></label>
+            <label class="field"><span>Título</span><input id="couponTitle" required maxlength="160" placeholder="5% na Dogmania"></label>
+            <label class="field field-wide"><span>Descrição</span><textarea id="couponDescription" rows="3" maxlength="700"></textarea></label>
+            <label class="field"><span>Parceiro responsável</span><select id="couponPartner"><option value="">DOGFIT (sem parceiro)</option></select></label>
+            <label class="field"><span>Associado específico <small>opcional</small></span><select id="couponMember"><option value="">Todos os associados</option></select></label>
+            <label class="field"><span>Tipo</span><select id="couponType"><option value="percentage">Percentual (%)</option><option value="fixed">Valor em reais</option></select></label>
+            <label class="field"><span>Desconto</span><input id="couponValue" required inputmode="decimal" placeholder="10"></label>
+            <label class="field"><span>Limite total <small>opcional</small></span><input id="couponTotalLimit" type="number" min="1"></label>
+            <label class="field"><span>Limite por associado</span><input id="couponMemberLimit" type="number" min="1" value="1"></label>
+            <label class="field"><span>Início <small>opcional</small></span><input id="couponStart" type="date"></label>
+            <label class="field"><span>Fim <small>opcional</small></span><input id="couponEnd" type="date"></label>
+            <label class="toggle-field"><input id="couponActive" type="checkbox" checked><span>Cupom ativo</span></label>
+            <div class="form-actions field-wide"><button class="btn btn-ghost" data-close="couponEditor" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Salvar cupom</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section id="redemptionsView" class="club-view">
+        <div class="section-toolbar"><div><h2>Histórico de utilizações</h2><p>Registre também os eventos gratuitos e as camisas entregues pela DOGFIT.</p></div><button class="btn btn-primary" id="newRedemptionBtn" type="button">+ Registrar utilização</button></div>
+        <div class="filters-bar single-filter"><input id="redemptionSearch" placeholder="Buscar associado ou cupom..."></div>
+        <div id="redemptionsList" class="data-list"></div>
+        <div class="editor-card hidden" id="redemptionEditor">
+          <div class="editor-head"><div><p class="eyebrow">UTILIZAÇÃO</p><h3>Registrar benefício ou cupom</h3></div><button class="icon-btn" data-close="redemptionEditor" type="button">×</button></div>
+          <form id="redemptionForm" class="form-grid">
+            <label class="field"><span>Associado</span><select id="redemptionMember" required><option value="">Selecione</option></select></label>
+            <label class="field"><span>Benefício ou cupom</span><select id="redemptionItem" required><option value="">Selecione</option></select></label>
+            <label class="field"><span>Valor da compra/serviço (R$)</span><input id="redemptionAmount" inputmode="decimal" placeholder="0,00"></label>
+            <label class="field field-wide"><span>Observação</span><textarea id="redemptionNotes" rows="3" maxlength="500" placeholder="Ex.: 1ª participação gratuita de agosto"></textarea></label>
+            <div class="form-actions field-wide"><button class="btn btn-ghost" data-close="redemptionEditor" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Confirmar utilização</button></div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="js/club-admin.js" defer></script>
+</body>
+</html>

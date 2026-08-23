@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+  <title>Portal do Parceiro | DOGFIT</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/club-portal.css">
+</head>
+<body>
+  <main class="portal-shell">
+    <header class="portal-header"><a class="brand" href="/">DOG<span>FIT</span><small>PORTAL DO PARCEIRO</small></a><div class="header-actions"><span id="partnerName" class="partner-name"></span><button id="logoutBtn" class="btn btn-ghost hidden" type="button">Sair</button></div></header>
+
+    <section id="loginView" class="panel login-panel">
+      <p class="eyebrow">ACESSO RESTRITO</p><h1>Parceiro<br>DOGFIT</h1><p class="lead">Valide associados e registre benefícios com segurança.</p>
+      <form id="loginForm" class="form">
+        <label class="field"><span>E-mail cadastrado</span><input id="loginEmail" type="email" required autocomplete="username"></label>
+        <label class="field"><span>Senha</span><input id="loginCode" type="password" required autocomplete="current-password"></label>
+        <button class="btn btn-primary" type="submit">Entrar no portal</button>
+      </form><div id="loginMessage" class="message"></div>
+    </section>
+
+    <section id="portalView" class="hidden">
+      <div class="panel">
+        <p class="eyebrow">VALIDAÇÃO DE ASSOCIADO</p><h2>Consultar carteirinha</h2><p class="lead">Digite o código exibido na carteirinha DOGFIT do cliente.</p>
+        <form id="memberSearchForm" class="search-card"><input id="memberCode" required maxlength="30" placeholder="DFC-XXXXXX"><button class="btn btn-primary" type="submit">Consultar</button></form>
+        <div id="memberResult"></div>
+      </div>
+      <div class="panel section-title"><div class="member-head"><div><p class="eyebrow">HISTÓRICO</p><h2>Utilizações recentes</h2></div><button id="refreshHistory" class="btn btn-ghost" type="button">Atualizar</button></div><div id="partnerHistory" class="history"></div></div>
+    </section>
+  </main>
+
+  <dialog id="redeemDialog">
+    <form id="redeemForm" class="dialog-body">
+      <input id="redeemKind" type="hidden"><input id="redeemItemId" type="hidden"><input id="redeemMemberId" type="hidden">
+      <p class="eyebrow">REGISTRAR UTILIZAÇÃO</p><h3 id="redeemTitle">Benefício</h3><p class="lead">Confirme os valores. O registro não poderá ser alterado pelo parceiro.</p>
+      <label class="field"><span>Valor da compra/serviço (R$)</span><input id="redeemAmount" inputmode="decimal" placeholder="0,00"></label>
+      <label class="field"><span>Observação <small>(opcional)</small></span><textarea id="redeemNotes" rows="2" maxlength="500"></textarea></label>
+      <div id="redeemResult"></div>
+      <div class="dialog-actions"><button id="cancelRedeem" class="btn btn-ghost" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Confirmar utilização</button></div>
+    </form>
+  </dialog>
+  <script src="js/partner.js" defer></script>
+</body>
+</html>

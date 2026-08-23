@@ -1,0 +1,23 @@
+.club-view{display:none}.club-view.active{display:block}
+.club-nav a.nav-item{display:block}
+.club-stats{grid-template-columns:repeat(4,1fr)}
+.club-quick{grid-template-columns:repeat(4,1fr)}
+.single-filter{grid-template-columns:1fr}
+.compact-notice{margin:0;padding:13px 15px}
+.data-list{display:grid;gap:10px}
+.data-row{display:grid;grid-template-columns:minmax(190px,1.45fr) minmax(150px,1fr) minmax(140px,.85fr) auto;align-items:center;gap:16px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.data-primary strong,.data-primary span,.data-secondary strong,.data-secondary span{display:block}
+.data-primary strong{font-size:1rem}.data-primary span,.data-secondary span{color:var(--muted);font-size:.8rem;margin-top:4px}
+.data-secondary strong{font-size:.82rem;color:#ddd}
+.status-pill{display:inline-flex;width:max-content;padding:6px 9px;border-radius:999px;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;border:1px solid rgba(91,217,130,.25);background:rgba(91,217,130,.09);color:#77e59b}
+.status-pill.warn{border-color:rgba(255,177,67,.3);background:rgba(255,177,67,.1);color:#ffbd61}
+.status-pill.off{border-color:rgba(255,82,82,.25);background:rgba(255,82,82,.08);color:#ff8585}
+.data-actions{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.small-btn{border:1px solid var(--line);background:#1c1c1c;color:#eee;border-radius:8px;padding:8px 10px;font-size:.76rem;font-weight:700}
+.small-btn:hover{border-color:rgba(255,106,0,.55)}
+.small-btn.orange{background:var(--orange);color:#111;border-color:var(--orange)}
+.code-chip{font:800 .82rem/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--orange);letter-spacing:.04em}
+.value-highlight{font:800 1.25rem/1 "Barlow Condensed",sans-serif;color:var(--orange)}
+.empty-state{background:var(--panel)}
+@media(max-width:1100px){.club-stats,.club-quick{grid-template-columns:repeat(2,1fr)}.data-row{grid-template-columns:1.25fr 1fr auto}.data-row>.data-secondary:nth-child(3){display:none}}
+@media(max-width:700px){.club-stats,.club-quick{grid-template-columns:1fr}.data-row{grid-template-columns:1fr}.data-row>.data-secondary:nth-child(3){display:block}.data-actions{justify-content:flex-start}.club-view h2{font-size:2rem}}

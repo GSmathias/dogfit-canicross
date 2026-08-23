@@ -15,7 +15,12 @@
       "/api/*",
       "/media/*",
       "/admin",
-      "/admin.html"
+      "/admin.html",
+      "/club-admin",
+      "/club-admin.html",
+      "/parceiro",
+      "/parceiro.html",
+      "/clube/*"
     ]
   },
 
