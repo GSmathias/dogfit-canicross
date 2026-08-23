@@ -98,7 +98,7 @@ export default {
 
       if (path === "/club-admin") {
         if (!isAuthorized(request, env)) return unauthorized();
-        return env.ASSETS.fetch(assetRequest(request, "/club-admin.html"));
+        return env.ASSETS.fetch(assetRequest(request, "/club-admin"));
       }
 
       if (path === "/parceiro.html" || path === "/parceiro/") {
@@ -106,11 +106,11 @@ export default {
       }
 
       if (path === "/parceiro") {
-        return env.ASSETS.fetch(assetRequest(request, "/partner.html"));
+        return env.ASSETS.fetch(assetRequest(request, "/partner"));
       }
 
       if (/^\/clube\/[a-f0-9-]{36}$/i.test(path)) {
-        return env.ASSETS.fetch(assetRequest(request, "/member-card.html"));
+        return env.ASSETS.fetch(assetRequest(request, "/member-card"));
       }
 
       if (method === "GET" && path === "/api/content") {
