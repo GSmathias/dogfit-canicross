@@ -1,6 +1,7 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 let dashboardData = null;
+const accountPath = "/minha-conta";
 
 const escapeHtml = value => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -132,14 +133,26 @@ async function loadDashboard() {
 $("#loginForm").onsubmit = async event => {
   event.preventDefault();
   const error = $('[data-error="login"]'); error.textContent = "";
-  try { await request("/api/client/login", { method: "POST", body: JSON.stringify(formObject(event.currentTarget)) }); await loadDashboard(); }
+  try {
+    await request("/api/client/login", {
+      method: "POST",
+      body: JSON.stringify(formObject(event.currentTarget))
+    });
+    location.assign(accountPath);
+  }
   catch (caught) { error.textContent = caught.message; }
 };
 
 $("#registerForm").onsubmit = async event => {
   event.preventDefault();
   const error = $('[data-error="register"]'); error.textContent = "";
-  try { await request("/api/client/register", { method: "POST", body: JSON.stringify(formObject(event.currentTarget)) }); await loadDashboard(); toast("Conta criada com sucesso."); }
+  try {
+    await request("/api/client/register", {
+      method: "POST",
+      body: JSON.stringify(formObject(event.currentTarget))
+    });
+    location.assign(accountPath);
+  }
   catch (caught) { error.textContent = caught.message; }
 };
 
@@ -152,11 +165,21 @@ $("#profileForm").onsubmit = async event => {
 
 $("#logoutButton").onclick = async () => {
   try { await request("/api/client/logout", { method: "POST" }); } catch {}
-  location.reload();
+  location.assign("/cliente");
 };
 
-loadDashboard().catch(caught => {
-  if (caught.status !== 401) toast(caught.message, true);
-  $("#authShell").hidden = false;
-  $("#clientDashboard").hidden = true;
-});
+const onAccountPage = location.pathname === accountPath || location.pathname === `${accountPath}/`;
+
+loadDashboard()
+  .then(() => {
+    if (!onAccountPage) location.replace(accountPath);
+  })
+  .catch(caught => {
+    if (onAccountPage && caught.status === 401) {
+      location.replace("/cliente");
+      return;
+    }
+    if (caught.status !== 401) toast(caught.message, true);
+    $("#authShell").hidden = false;
+    $("#clientDashboard").hidden = true;
+  });

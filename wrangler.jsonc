@@ -3,6 +3,8 @@
   "name": "dogfit-canicross",
   "account_id": "a8cf2bac201ecee5dbc088fc67b8e045",
   "main": "./worker.js",
+  "compatibility_date": "2026-08-22",
+
   "observability": {
     "enabled": true
   },
@@ -21,6 +23,8 @@
       "/inscricoes-admin.html",
       "/cliente",
       "/cliente.html",
+      "/minha-conta",
+      "/minha-conta.html",
       "/parceiro",
       "/parceiro.html",
       "/clube/*"

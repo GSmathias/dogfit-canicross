@@ -149,7 +149,67 @@ function registrationCode() {
   return `PRE-${new Date().getUTCFullYear()}-${randomHex(3).toUpperCase()}`;
 }
 
-async function registerForEvent(request, env) {
+function sociabilityLabel(value) {
+  return {
+    social: "Sociável",
+    selective: "Seletivo",
+    reactive: "Reativo/agressivo",
+    unknown: "Não informado"
+  }[value] || "Não informado";
+}
+
+async function notifyRegistrationWhatsApp(env, registration) {
+  const phoneNumberId = clean(env.WHATSAPP_PHONE_NUMBER_ID, 100);
+  const accessToken = clean(env.WHATSAPP_ACCESS_TOKEN, 1000);
+  if (!phoneNumberId || !accessToken) {
+    console.warn("Notificação WhatsApp não configurada: defina WHATSAPP_PHONE_NUMBER_ID e WHATSAPP_ACCESS_TOKEN.");
+    return;
+  }
+
+  const graphVersion = clean(env.WHATSAPP_GRAPH_VERSION, 20) || "v23.0";
+  const templateName = clean(env.WHATSAPP_TEMPLATE_NAME, 120) || "nova_pre_inscricao_dogfit";
+  const adminNumber = clean(env.WHATSAPP_ADMIN_NUMBER, 30).replace(/\D/g, "") || "5562994431333";
+  const parameters = [
+    registration.registration_code,
+    registration.full_name,
+    registration.event_title,
+    registration.phone,
+    registration.dog_name,
+    String(registration.dog_count),
+    sociabilityLabel(registration.sociability)
+  ].map(text => ({ type: "text", text: clean(text, 250) }));
+
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/${encodeURIComponent(graphVersion)}/${encodeURIComponent(phoneNumberId)}/messages`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: adminNumber,
+          type: "template",
+          template: {
+            name: templateName,
+            language: { code: "pt_BR" },
+            components: [{ type: "body", parameters }]
+          }
+        })
+      }
+    );
+    if (!response.ok) {
+      const detail = await response.text();
+      console.error("Falha ao enviar notificação WhatsApp:", response.status, detail);
+    }
+  } catch (caught) {
+    console.error("Erro ao enviar notificação WhatsApp:", caught);
+  }
+}
+
+async function registerForEvent(request, env, ctx) {
   const data = await body(request);
   const email = normalizeEmail(data?.email);
   const dogCount = Math.max(1, Math.min(10, Number.parseInt(data?.dog_count, 10) || 1));
@@ -193,6 +253,16 @@ async function registerForEvent(request, env) {
         clean(data.phone, 30), email, clean(data.dog_name, 120),
         clean(data.dog_breed, 120), dogCount, sociability
       ).run();
+      const notification = notifyRegistrationWhatsApp(env, {
+        registration_code: code,
+        full_name: clean(data.full_name, 180),
+        event_title: event.title,
+        phone: clean(data.phone, 30),
+        dog_name: clean(data.dog_name, 120),
+        dog_count: dogCount,
+        sociability
+      });
+      if (ctx?.waitUntil) ctx.waitUntil(notification);
       return json({
         ok: true,
         registration_code: code,
@@ -354,8 +424,10 @@ async function updateAdminRegistration(request, env, id) {
   return json(await env.DB.prepare("SELECT * FROM event_registrations WHERE id = ?").bind(id).first());
 }
 
-export async function handlePublicEvent({ request, env, path, method }) {
-  if (path === "/api/events/register" && method === "POST") return registerForEvent(request, env);
+export async function handlePublicEvent({ request, env, ctx, path, method }) {
+  if (path === "/api/events/register" && method === "POST") {
+    return registerForEvent(request, env, ctx);
+  }
   return error("Rota não encontrada.", 404);
 }
 

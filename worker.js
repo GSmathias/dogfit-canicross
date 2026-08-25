@@ -123,6 +123,14 @@ export default {
         return env.ASSETS.fetch(assetRequest(request, "/client"));
       }
 
+      if (path === "/minha-conta.html" || path === "/minha-conta/") {
+        return Response.redirect(`${url.origin}/minha-conta`, 302);
+      }
+
+      if (path === "/minha-conta") {
+        return env.ASSETS.fetch(assetRequest(request, "/client"));
+      }
+
       if (path === "/parceiro.html" || path === "/parceiro/") {
         return Response.redirect(`${url.origin}/parceiro`, 302);
       }
