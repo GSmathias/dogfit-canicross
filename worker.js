@@ -7,6 +7,11 @@ import {
   handlePartner,
   handlePublicClub
 } from "./functions/api/club.js";
+import {
+  handleAdminRegistrations,
+  handleClient,
+  handlePublicEvent
+} from "./functions/api/clients.js";
 
 import {
   onRequestGet as getAdminContent,
@@ -101,6 +106,23 @@ export default {
         return env.ASSETS.fetch(assetRequest(request, "/club-admin"));
       }
 
+      if (path === "/inscricoes-admin.html" || path === "/inscricoes-admin/") {
+        return Response.redirect(`${url.origin}/inscricoes-admin`, 302);
+      }
+
+      if (path === "/inscricoes-admin") {
+        if (!isAuthorized(request, env)) return unauthorized();
+        return env.ASSETS.fetch(assetRequest(request, "/registrations-admin"));
+      }
+
+      if (path === "/cliente.html" || path === "/cliente/") {
+        return Response.redirect(`${url.origin}/cliente`, 302);
+      }
+
+      if (path === "/cliente") {
+        return env.ASSETS.fetch(assetRequest(request, "/client"));
+      }
+
       if (path === "/parceiro.html" || path === "/parceiro/") {
         return Response.redirect(`${url.origin}/parceiro`, 302);
       }
@@ -129,6 +151,14 @@ export default {
         return handlePartner({ request, env, ctx, path, method });
       }
 
+      if (path.startsWith("/api/events/")) {
+        return handlePublicEvent({ request, env, ctx, path, method });
+      }
+
+      if (path.startsWith("/api/client/")) {
+        return handleClient({ request, env, ctx, path, method });
+      }
+
       if (method === "GET" && path.startsWith("/media/")) {
         const key = path.slice("/media/".length);
         if (!key) return new Response("Not found", { status: 404 });
@@ -153,6 +183,10 @@ export default {
 
         if (path.startsWith("/api/admin/club/")) {
           return handleAdminClub({ request, env, ctx, path, method });
+        }
+
+        if (path.startsWith("/api/admin/registrations")) {
+          return handleAdminRegistrations({ request, env, ctx, path, method });
         }
 
         if (path === "/api/admin/content") {

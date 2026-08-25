@@ -111,16 +111,19 @@
     }
 
     const eventBtn = document.querySelector(".event-content .whatsapp-link");
+    const registrationBtn = document.querySelector("#openRegistration");
     if (eventBtn && content.event_whatsapp_message) {
       eventBtn.dataset.message = content.event_whatsapp_message;
     }
 
     if (eventBtn && content.event_status === "soldout") {
-      eventBtn.textContent = "EVENTO ESGOTADO";
-      eventBtn.style.pointerEvents = "none";
-      eventBtn.style.opacity = ".55";
+      if (registrationBtn) {
+        registrationBtn.textContent = "EVENTO ESGOTADO";
+        registrationBtn.disabled = true;
+        registrationBtn.style.opacity = ".55";
+      }
     } else if (eventBtn && content.event_status === "soon") {
-      eventBtn.textContent = "QUERO SER AVISADO";
+      if (registrationBtn) registrationBtn.textContent = "QUERO SER AVISADO";
     }
 
     const clubHeading = document.querySelector("#clube h2");

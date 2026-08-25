@@ -28,6 +28,7 @@
       </nav>
       <div class="sidebar-bottom">
         <a href="/admin">← Administração do site</a>
+        <a href="/inscricoes-admin">Inscrições dos eventos ↗</a>
         <a href="/parceiro" target="_blank">Portal do parceiro ↗</a>
         <a href="/" target="_blank">Abrir site ↗</a>
       </div>
@@ -106,6 +107,12 @@
             <label class="field"><span>E-mail de acesso</span><input id="partnerEmail" required type="email" maxlength="180"></label>
             <label class="field"><span>Senha de acesso <small id="partnerPasswordHint">mínimo 6 caracteres</small></span><input id="partnerAccessCode" type="password" minlength="6" autocomplete="new-password"></label>
             <label class="toggle-field"><input id="partnerActive" type="checkbox" checked><span>Acesso ativo</span></label>
+            <label class="field"><span>Categoria pública</span><select id="partnerCategory"><option>Pet shop</option><option>Clínica veterinária</option><option>Loja especializada</option><option>Prestador de serviço</option><option>Outro</option></select></label>
+            <label class="field"><span>Telefone público</span><input id="partnerPhone" maxlength="30" placeholder="(62) 99999-9999"></label>
+            <label class="field field-wide"><span>Endereço</span><input id="partnerAddress" maxlength="250"></label>
+            <label class="field"><span>Instagram</span><input id="partnerInstagram" maxlength="100" placeholder="dogmania"></label>
+            <label class="toggle-field"><input id="partnerPublicVisible" type="checkbox" checked><span>Mostrar na área do cliente</span></label>
+            <label class="field field-wide"><span>Descrição pública</span><textarea id="partnerDescription" rows="3" maxlength="500" placeholder="Produtos e serviços oferecidos pelo parceiro."></textarea></label>
             <div class="notice field-wide compact-notice">Envie ao parceiro o endereço <strong id="partnerPortalUrl">/parceiro</strong>, o e-mail e a senha cadastrada. Ele não terá acesso ao painel administrativo.</div>
             <div class="form-actions field-wide"><button class="btn btn-ghost" data-close="partnerEditor" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Salvar parceiro</button></div>
           </form>

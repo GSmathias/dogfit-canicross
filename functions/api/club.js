@@ -301,7 +301,8 @@ async function updateMember(request, env, id) {
 
 async function listPartners(env) {
   const { results } = await env.DB.prepare(`
-    SELECT p.id, p.name, p.email, p.active, p.created_at, p.updated_at,
+    SELECT p.id, p.name, p.email, p.active, p.category, p.phone, p.address,
+      p.instagram, p.description, p.public_visible, p.created_at, p.updated_at,
       (SELECT COUNT(*) FROM club_redemptions r WHERE r.partner_id = p.id) AS redemptions
     FROM club_partners p
     ORDER BY p.active DESC, p.name COLLATE NOCASE
@@ -321,11 +322,18 @@ async function savePartner(request, env, id = null) {
       const salt = randomHex(16);
       const hash = await accessHash(accessCode, salt);
       const result = await env.DB.prepare(`
-        INSERT INTO club_partners (name, email, access_salt, access_hash, active)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(clean(data.name, 140), partnerEmail, salt, hash, data.active === false ? 0 : 1).run();
+        INSERT INTO club_partners (
+          name, email, access_salt, access_hash, active, category, phone,
+          address, instagram, description, public_visible
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        clean(data.name, 140), partnerEmail, salt, hash, data.active === false ? 0 : 1,
+        clean(data.category, 80) || "Pet shop", clean(data.phone, 30),
+        clean(data.address, 250), clean(data.instagram, 100).replace(/^@/, ""),
+        clean(data.description, 500), data.public_visible === false ? 0 : 1
+      ).run();
       return json(
-        await env.DB.prepare("SELECT id, name, email, active, created_at FROM club_partners WHERE id = ?")
+        await env.DB.prepare("SELECT id, name, email, active, category, phone, address, instagram, description, public_visible, created_at FROM club_partners WHERE id = ?")
           .bind(result.meta.last_row_id).first(),
         201
       );
@@ -342,10 +350,17 @@ async function savePartner(request, env, id = null) {
       await env.DB.prepare("DELETE FROM club_partner_sessions WHERE partner_id = ?").bind(id).run();
     }
     await env.DB.prepare(`
-      UPDATE club_partners SET name = ?, email = ?, access_salt = ?, access_hash = ?, active = ?, updated_at = datetime('now')
+      UPDATE club_partners SET name = ?, email = ?, access_salt = ?, access_hash = ?,
+        active = ?, category = ?, phone = ?, address = ?, instagram = ?,
+        description = ?, public_visible = ?, updated_at = datetime('now')
       WHERE id = ?
-    `).bind(clean(data.name, 140), partnerEmail, salt, hash, bool(data.active) ? 1 : 0, id).run();
-    return json(await env.DB.prepare("SELECT id, name, email, active, created_at, updated_at FROM club_partners WHERE id = ?").bind(id).first());
+    `).bind(
+      clean(data.name, 140), partnerEmail, salt, hash, bool(data.active) ? 1 : 0,
+      clean(data.category, 80) || "Pet shop", clean(data.phone, 30),
+      clean(data.address, 250), clean(data.instagram, 100).replace(/^@/, ""),
+      clean(data.description, 500), bool(data.public_visible) ? 1 : 0, id
+    ).run();
+    return json(await env.DB.prepare("SELECT id, name, email, active, category, phone, address, instagram, description, public_visible, created_at, updated_at FROM club_partners WHERE id = ?").bind(id).first());
   } catch (error) {
     if (String(error).includes("UNIQUE")) return badRequest("Já existe um parceiro com esse e-mail.");
     throw error;

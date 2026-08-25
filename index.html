@@ -41,6 +41,7 @@
         <a href="#performance">Performance</a>
         <a href="#passeador">Passeador</a>
         <a href="#galeria">Galeria</a>
+        <a href="/cliente">Área do cliente</a>
         <a class="nav-cta" href="#contato">Falar com a DOGFIT</a>
       </nav>
     </div>
@@ -139,7 +140,18 @@
       </div>
     </section>
 
-    <section class="section event-section" id="eventos">
+    <nav class="mobile-section-tabs" aria-label="Escolha o que deseja ver">
+      <div class="mobile-tabs-track">
+        <button class="mobile-tab is-active" type="button" data-site-tab="eventos">Eventos</button>
+        <button class="mobile-tab" type="button" data-site-tab="clube">Clube</button>
+        <button class="mobile-tab" type="button" data-site-tab="produtos">Produtos</button>
+        <button class="mobile-tab" type="button" data-site-tab="performance">Performance</button>
+        <button class="mobile-tab" type="button" data-site-tab="passeador">Passeador</button>
+        <button class="mobile-tab" type="button" data-site-tab="galeria">Galeria</button>
+      </div>
+    </nav>
+
+    <section class="section event-section is-active" id="eventos" data-site-panel="eventos">
       <div class="container">
         <div class="section-top reveal">
           <div>
@@ -186,17 +198,21 @@
               <span>Trilha e canicross</span>
             </div>
 
-            <a class="btn btn-primary btn-full whatsapp-link"
-               href="#"
-               data-message="Olá! Quero saber mais sobre o próximo evento da DOGFIT CANICROSS.">
-              QUERO PARTICIPAR <span>→</span>
-            </a>
+            <div class="event-actions">
+              <button class="btn btn-primary btn-full" id="openRegistration" type="button">
+                FAZER PRÉ-INSCRIÇÃO <span>→</span>
+              </button>
+              <a class="event-help-link whatsapp-link" href="#"
+                 data-message="Olá! Quero saber mais sobre o próximo evento da DOGFIT CANICROSS.">
+                Tirar dúvida pelo WhatsApp
+              </a>
+            </div>
           </div>
         </article>
       </div>
     </section>
 
-    <section class="section club-section" id="clube">
+    <section class="section club-section" id="clube" data-site-panel="clube">
       <div class="container club-layout">
         <div class="club-content reveal">
           <p class="eyebrow">CLUBE DOGFIT</p>
@@ -219,6 +235,7 @@
              data-message="Olá! Quero conhecer o Clube DOGFIT CANICROSS.">
             QUERO SER MEMBRO <span>→</span>
           </a>
+          <a class="club-client-link" href="/cliente">Já é cliente ou membro? Acessar minha área →</a>
         </div>
 
         <div class="club-photo-wrap reveal">
@@ -238,7 +255,7 @@
       </div>
     </section>
 
-    <section class="section products-section" id="produtos">
+    <section class="section products-section" id="produtos" data-site-panel="produtos">
       <div class="container">
         <div class="section-top reveal">
           <div>
@@ -296,7 +313,7 @@
       </div>
     </section>
 
-    <section class="section performance-section" id="performance">
+    <section class="section performance-section" id="performance" data-site-panel="performance">
       <div class="container service-layout">
         <div class="performance-visual service-visual placeholder-image reveal">
           <span>FOTO DOGFIT PERFORMANCE</span>
@@ -334,7 +351,7 @@
       </div>
     </section>
 
-    <section class="section walker-section" id="passeador">
+    <section class="section walker-section" id="passeador" data-site-panel="passeador">
       <div class="container walker-layout">
         <div class="walker-copy reveal">
           <p class="eyebrow">DOGFIT PASSEADOR DE CÃES</p>
@@ -399,7 +416,7 @@
       </div>
     </section>
 
-    <section class="section gallery-section" id="galeria">
+    <section class="section gallery-section" id="galeria" data-site-panel="galeria">
       <div class="container">
         <div class="section-top reveal">
           <div>
@@ -466,6 +483,92 @@
     </section>
   </main>
 
+  <div class="registration-modal" id="registrationModal" aria-hidden="true">
+    <div class="registration-backdrop" data-close-registration></div>
+    <section class="registration-dialog" role="dialog" aria-modal="true" aria-labelledby="registrationTitle">
+      <button class="registration-close" type="button" data-close-registration aria-label="Fechar">×</button>
+
+      <div id="registrationFormView">
+        <p class="eyebrow">PRÓXIMO EVENTO</p>
+        <h2 id="registrationTitle">PRÉ-INSCRIÇÃO</h2>
+        <p class="registration-intro">Preencha os dados do participante e do cão. O pagamento será realizado após o envio.</p>
+
+        <form id="eventRegistrationForm" class="registration-form">
+          <label class="registration-field registration-wide">
+            <span>Nome completo</span>
+            <input name="full_name" autocomplete="name" maxlength="180" required>
+          </label>
+          <label class="registration-field">
+            <span>Data de nascimento</span>
+            <input name="birth_date" type="date" autocomplete="bday" required>
+          </label>
+          <label class="registration-field">
+            <span>Número para contato</span>
+            <input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" required placeholder="(62) 99999-9999">
+          </label>
+          <label class="registration-field registration-wide">
+            <span>E-mail</span>
+            <input name="email" type="email" autocomplete="email" maxlength="180" required>
+          </label>
+          <label class="registration-field">
+            <span>Nome do cachorro</span>
+            <input name="dog_name" maxlength="120" required>
+          </label>
+          <label class="registration-field">
+            <span>Raça</span>
+            <input name="dog_breed" maxlength="120" required placeholder="Sem raça definida, se for o caso">
+          </label>
+          <label class="registration-field">
+            <span>Quantos cães irá levar?</span>
+            <input name="dog_count" type="number" min="1" max="10" value="1" required>
+          </label>
+          <label class="registration-field">
+            <span>Como é a sociabilidade?</span>
+            <select name="sociability" required>
+              <option value="social">Sociável</option>
+              <option value="selective">Seletivo com alguns cães/pessoas</option>
+              <option value="reactive">Reativo/agressivo</option>
+              <option value="unknown">Ainda não sei informar</option>
+            </select>
+          </label>
+
+          <label class="registration-consent registration-wide">
+            <input name="recreational_terms_accepted" type="checkbox" required>
+            <span>Declaro estar ciente de que o evento possui caráter recreativo, assumindo total responsabilidade por mim e pelo meu animal durante toda a participação no evento. Comprometo-me a manter o cão na guia durante todo o percurso, respeitar as orientações da organização e zelar pela segurança dos demais participantes e animais presentes.</span>
+          </label>
+          <label class="registration-consent registration-wide">
+            <input name="muzzle_terms_accepted" type="checkbox" required>
+            <span>Em caso de cães reativos/agressivos, concorda com o uso obrigatório de focinheira?</span>
+          </label>
+          <label class="registration-consent registration-wide privacy-consent">
+            <input name="privacy_accepted" type="checkbox" required>
+            <span>Autorizo o uso dos dados informados exclusivamente para organizar o evento, comunicar informações da inscrição e manter meu histórico na DOGFIT.</span>
+          </label>
+
+          <p class="registration-error registration-wide" id="registrationError" role="alert"></p>
+          <button class="btn btn-primary registration-wide" type="submit" id="registrationSubmit">
+            ENVIAR PRÉ-INSCRIÇÃO <span>→</span>
+          </button>
+        </form>
+      </div>
+
+      <div class="registration-success" id="registrationSuccess" hidden>
+        <div class="success-mark">✓</div>
+        <p class="eyebrow">DOGFIT CANICROSS</p>
+        <h2>PRÉ-INSCRIÇÃO<br><span>REALIZADA COM SUCESSO!</span></h2>
+        <p>Para finalizar sua inscrição, realize o pagamento na chave PIX:</p>
+        <button class="pix-copy" type="button" data-copy-pix>
+          <small>CHAVE PIX</small>
+          <strong>047.652.591-88</strong>
+          <span>TOQUE PARA COPIAR</span>
+        </button>
+        <p class="registration-code">Código da pré-inscrição: <strong id="registrationCode">—</strong></p>
+        <a class="btn btn-outline" href="/cliente">SALVAR MEUS DADOS / ÁREA DO CLIENTE</a>
+        <button class="registration-done" type="button" data-close-registration>Fechar</button>
+      </div>
+    </section>
+  </div>
+
   <footer class="site-footer">
     <div class="container footer-main">
       <div class="footer-brand-area">
@@ -483,6 +586,7 @@
           <a href="#eventos">Eventos</a>
           <a href="#clube">Clube</a>
           <a href="#produtos">Produtos</a>
+          <a href="/cliente">Área do cliente</a>
         </div>
 
         <div>

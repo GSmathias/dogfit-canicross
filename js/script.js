@@ -111,3 +111,148 @@ document.addEventListener("dogfit:data-ready", refreshDynamicUI);
 
 const year = document.getElementById("year");
 if (year) year.textContent = new Date().getFullYear();
+
+const mobileTabs = [...document.querySelectorAll("[data-site-tab]")];
+const mobilePanels = [...document.querySelectorAll("[data-site-panel]")];
+const mobileTabsBar = document.querySelector(".mobile-section-tabs");
+
+function mobileLayout() {
+  return window.matchMedia("(max-width: 700px)").matches;
+}
+
+function activateSitePanel(panelName, options = {}) {
+  const panel = document.querySelector(`[data-site-panel="${panelName}"]`);
+  if (!panel) return;
+
+  mobileTabs.forEach(tab => {
+    const active = tab.dataset.siteTab === panelName;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", String(active));
+    if (active) tab.scrollIntoView({ inline: "center", block: "nearest" });
+  });
+  mobilePanels.forEach(item => item.classList.toggle("is-active", item === panel));
+
+  if (options.updateHash !== false) {
+    history.replaceState(null, "", `#${panelName}`);
+  }
+  if (options.scroll !== false && mobileLayout()) {
+    mobileTabsBar?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+mobileTabs.forEach(tab => {
+  tab.addEventListener("click", () => activateSitePanel(tab.dataset.siteTab));
+});
+
+document.querySelectorAll('a[href^="#"]').forEach(link => {
+  const name = link.getAttribute("href").slice(1);
+  if (!mobilePanels.some(panel => panel.dataset.sitePanel === name)) return;
+  link.addEventListener("click", event => {
+    if (!mobileLayout()) return;
+    event.preventDefault();
+    activateSitePanel(name);
+  });
+});
+
+const initialPanel = location.hash.slice(1);
+if (mobilePanels.some(panel => panel.dataset.sitePanel === initialPanel)) {
+  activateSitePanel(initialPanel, { updateHash: false, scroll: false });
+}
+
+const registrationModal = document.getElementById("registrationModal");
+const registrationForm = document.getElementById("eventRegistrationForm");
+const registrationFormView = document.getElementById("registrationFormView");
+const registrationSuccess = document.getElementById("registrationSuccess");
+const registrationError = document.getElementById("registrationError");
+const registrationSubmit = document.getElementById("registrationSubmit");
+
+function setRegistrationOpen(open) {
+  if (!registrationModal) return;
+  registrationModal.classList.toggle("is-open", open);
+  registrationModal.setAttribute("aria-hidden", String(!open));
+  document.body.classList.toggle("modal-open", open);
+  if (open) {
+    registrationModal.querySelector("input")?.focus();
+  } else {
+    document.getElementById("openRegistration")?.focus();
+  }
+}
+
+document.getElementById("openRegistration")?.addEventListener("click", () => {
+  registrationFormView.hidden = false;
+  registrationSuccess.hidden = true;
+  if (registrationError) registrationError.textContent = "";
+  setRegistrationOpen(true);
+});
+
+document.querySelectorAll("[data-close-registration]").forEach(button => {
+  button.addEventListener("click", () => setRegistrationOpen(false));
+});
+
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && registrationModal?.classList.contains("is-open")) {
+    setRegistrationOpen(false);
+  }
+});
+
+async function prefillRegistration() {
+  if (!registrationForm) return;
+  try {
+    const response = await fetch("/api/client/dashboard", { credentials: "same-origin" });
+    if (!response.ok) return;
+    const { customer } = await response.json();
+    ["full_name", "birth_date", "phone", "email", "dog_name", "dog_breed", "dog_count", "sociability"]
+      .forEach(name => {
+        const field = registrationForm.elements[name];
+        if (field && customer[name] != null) field.value = customer[name];
+      });
+  } catch {
+    // A pré-inscrição continua disponível sem login.
+  }
+}
+
+registrationForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(registrationForm).entries());
+  data.dog_count = Number(data.dog_count || 1);
+  data.recreational_terms_accepted = registrationForm.elements.recreational_terms_accepted.checked;
+  data.muzzle_terms_accepted = registrationForm.elements.muzzle_terms_accepted.checked;
+  data.privacy_accepted = registrationForm.elements.privacy_accepted.checked;
+  registrationError.textContent = "";
+  registrationSubmit.disabled = true;
+  registrationSubmit.textContent = "ENVIANDO...";
+
+  try {
+    const response = await fetch("/api/events/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(data)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Não foi possível realizar a pré-inscrição.");
+    document.getElementById("registrationCode").textContent = result.registration_code;
+    registrationFormView.hidden = true;
+    registrationSuccess.hidden = false;
+    registrationSuccess.scrollIntoView({ block: "start" });
+    registrationForm.reset();
+  } catch (caught) {
+    registrationError.textContent = caught.message;
+  } finally {
+    registrationSubmit.disabled = false;
+    registrationSubmit.innerHTML = 'ENVIAR PRÉ-INSCRIÇÃO <span>→</span>';
+  }
+});
+
+document.querySelector("[data-copy-pix]")?.addEventListener("click", async event => {
+  try {
+    await navigator.clipboard.writeText("047.652.591-88");
+    const label = event.currentTarget.querySelector("span");
+    label.textContent = "PIX COPIADO!";
+    setTimeout(() => { label.textContent = "TOQUE PARA COPIAR"; }, 2200);
+  } catch {
+    window.prompt("Copie a chave PIX:", "047.652.591-88");
+  }
+});
+
+prefillRegistration();

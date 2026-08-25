@@ -1896,3 +1896,348 @@ h3 {
 .side-card-index{position:absolute;top:24px;left:24px;z-index:4;background:rgba(0,0,0,.36);backdrop-filter:blur(8px);padding:7px 9px}
 .side-card-bottom{position:absolute;z-index:4;left:24px;right:24px;bottom:24px}
 @media(max-width:1050px){.hero-side-card,.hero-side-photo img{min-height:390px}}
+
+/* =========================================================
+   NAVEGAÇÃO COMPACTA, PRÉ-INSCRIÇÃO E ÁREA DO CLIENTE
+   ========================================================= */
+
+.mobile-section-tabs {
+  display: none;
+}
+
+.event-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.event-actions .btn {
+  border: 0;
+  cursor: pointer;
+}
+
+.event-help-link,
+.club-client-link {
+  color: #c9c9c5;
+  font-size: .72rem;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: underline;
+  text-decoration-color: rgba(255,103,0,.65);
+  text-underline-offset: 5px;
+}
+
+.club-client-link {
+  display: block;
+  width: fit-content;
+  margin-top: 18px;
+  text-align: left;
+}
+
+body.modal-open {
+  overflow: hidden;
+}
+
+.registration-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.registration-modal.is-open {
+  display: flex;
+}
+
+.registration-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.84);
+  backdrop-filter: blur(9px);
+}
+
+.registration-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(920px, 100%);
+  max-height: calc(100svh - 36px);
+  overflow: auto;
+  padding: clamp(26px, 5vw, 54px);
+  background:
+    linear-gradient(135deg, rgba(255,103,0,.08), transparent 34%),
+    #0d0d0d;
+  border: 1px solid rgba(255,103,0,.36);
+  box-shadow: 0 35px 100px rgba(0,0,0,.65);
+}
+
+.registration-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: white;
+  background: #161616;
+  font-size: 1.45rem;
+  cursor: pointer;
+}
+
+.registration-dialog h2 {
+  font-size: clamp(3rem, 8vw, 5.5rem);
+}
+
+.registration-intro {
+  color: var(--muted);
+  max-width: 650px;
+  margin: 15px 0 28px;
+}
+
+.registration-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.registration-field {
+  display: grid;
+  gap: 7px;
+}
+
+.registration-field > span {
+  color: #d6d6d2;
+  font-size: .73rem;
+  font-weight: 800;
+}
+
+.registration-field input,
+.registration-field select {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 0 14px;
+  color: white;
+  background: #151515;
+  font: inherit;
+}
+
+.registration-field input:focus,
+.registration-field select:focus {
+  outline: 2px solid rgba(255,103,0,.45);
+  border-color: var(--orange);
+}
+
+.registration-field select option {
+  background: #151515;
+}
+
+.registration-wide {
+  grid-column: 1 / -1;
+}
+
+.registration-consent {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.025);
+  color: #c7c7c2;
+  font-size: .75rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.registration-consent input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--orange);
+}
+
+.privacy-consent {
+  border-color: rgba(255,103,0,.28);
+}
+
+.registration-error {
+  min-height: 20px;
+  color: #ff7b7b;
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.registration-success {
+  max-width: 660px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.success-mark {
+  width: 74px;
+  height: 74px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 24px;
+  border-radius: 50%;
+  color: #0b0b0b;
+  background: var(--orange);
+  font-size: 2.4rem;
+  font-weight: 900;
+  box-shadow: 0 0 0 12px rgba(255,103,0,.1);
+}
+
+.registration-success > p:not(.eyebrow):not(.registration-code) {
+  color: var(--muted);
+  margin: 20px auto;
+}
+
+.pix-copy {
+  width: min(100%, 480px);
+  margin: 5px auto 17px;
+  padding: 18px;
+  border: 1px solid var(--orange);
+  color: white;
+  background: rgba(255,103,0,.08);
+  cursor: pointer;
+}
+
+.pix-copy small,
+.pix-copy strong,
+.pix-copy span {
+  display: block;
+}
+
+.pix-copy small,
+.pix-copy span {
+  color: var(--orange);
+  font-size: .58rem;
+  font-weight: 900;
+  letter-spacing: .13em;
+}
+
+.pix-copy strong {
+  margin: 7px 0;
+  font: 900 clamp(2.2rem, 8vw, 4.2rem)/1 "Barlow Condensed", sans-serif;
+}
+
+.registration-code {
+  color: #c6c6c1;
+  margin-bottom: 23px;
+  font-size: .78rem;
+}
+
+.registration-code strong {
+  color: var(--orange);
+}
+
+.registration-done {
+  display: block;
+  margin: 18px auto 0;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  .experience-bar {
+    display: none;
+  }
+
+  .mobile-section-tabs {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 900;
+    display: block;
+    border-bottom: 1px solid var(--line);
+    background: rgba(8,8,8,.96);
+    backdrop-filter: blur(16px);
+  }
+
+  .mobile-tabs-track {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 4%;
+    scrollbar-width: none;
+  }
+
+  .mobile-tabs-track::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-tab {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 15px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: #bdbdb8;
+    background: #111;
+    font-size: .7rem;
+    font-weight: 900;
+    cursor: pointer;
+  }
+
+  .mobile-tab.is-active {
+    border-color: var(--orange);
+    color: #0b0b0b;
+    background: var(--orange);
+  }
+
+  [data-site-panel] {
+    display: none;
+  }
+
+  [data-site-panel].is-active {
+    display: block;
+  }
+
+  [data-site-panel].section {
+    padding: 55px 0;
+  }
+
+  .about-section,
+  .contact-section {
+    display: none;
+  }
+
+  .hero {
+    min-height: 72svh;
+  }
+
+  .hero-layout {
+    padding: 55px 0;
+  }
+
+  .hero-trust,
+  .hero-scroll {
+    display: none;
+  }
+
+  .registration-modal {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .registration-dialog {
+    width: 100%;
+    max-height: 100svh;
+    padding: 62px 20px 30px;
+    border: 0;
+  }
+
+  .registration-form {
+    grid-template-columns: 1fr;
+  }
+
+  .registration-wide {
+    grid-column: 1;
+  }
+}

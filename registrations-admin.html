@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Inscrições | DOGFIT CANICROSS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/registrations-admin.css">
+</head>
+<body>
+  <aside class="admin-sidebar">
+    <a class="brand" href="/admin"><strong>DOGFIT</strong><span>INSCRIÇÕES</span></a>
+    <nav><a href="/admin">Administração do site</a><a href="/club-admin">Clube e parceiros</a><a class="active" href="/inscricoes-admin">Inscrições dos eventos</a><a href="/" target="_blank">Abrir site ↗</a></nav>
+  </aside>
+  <main class="admin-main">
+    <header><div><p class="eyebrow">DOGFIT CANICROSS</p><h1>PRÉ-INSCRIÇÕES</h1></div><button id="exportCsv" type="button">Exportar CSV</button></header>
+    <section class="stats"><article><span>Total</span><strong id="statTotal">0</strong></article><article><span>Aguardando PIX</span><strong id="statPending">0</strong></article><article><span>Pagos</span><strong id="statPaid">0</strong></article><article><span>Cães inscritos</span><strong id="statDogs">0</strong></article></section>
+    <section class="toolbar"><input id="registrationSearch" placeholder="Buscar nome, e-mail, cão ou código..."><select id="registrationStatus"><option value="">Todos os status</option><option value="pending">Aguardando PIX</option><option value="paid">Pagamento confirmado</option><option value="cancelled">Cancelada</option></select></section>
+    <div class="registration-list" id="adminRegistrations"></div>
+  </main>
+  <div class="editor" id="registrationEditor" hidden>
+    <div class="editor-backdrop" data-close></div>
+    <section class="editor-card"><button class="close" data-close type="button">×</button><p class="eyebrow">PRÉ-INSCRIÇÃO</p><h2 id="editorTitle">DETALHES</h2><div id="editorDetails" class="details"></div><form id="registrationStatusForm"><label><span>Status do pagamento</span><select name="payment_status"><option value="pending">Aguardando PIX</option><option value="paid">Pagamento confirmado</option><option value="cancelled">Cancelada</option></select></label><label><span>Observações internas</span><textarea name="notes" rows="4" maxlength="1000"></textarea></label><button type="submit">SALVAR ALTERAÇÃO</button></form></section>
+  </div>
+  <div class="toast" id="adminToast"></div>
+  <script src="js/registrations-admin.js"></script>
+</body>
+</html>

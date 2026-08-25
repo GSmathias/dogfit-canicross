@@ -194,7 +194,7 @@ function renderPartners() {
   }
   box.innerHTML = state.partners.map(partner => `
     <article class="data-row">
-      <div class="data-primary"><strong>${escapeHtml(partner.name)}</strong><span>${escapeHtml(partner.email)}</span></div>
+      <div class="data-primary"><strong>${escapeHtml(partner.name)}</strong><span>${escapeHtml(partner.category || "Parceiro")} · ${escapeHtml(partner.email)}</span></div>
       <div class="data-secondary"><strong>${Number(partner.redemptions || 0)}</strong><span>utilizações registradas</span></div>
       <div class="data-secondary"><span class="status-pill${partner.active ? "" : " off"}">${partner.active ? "Acesso ativo" : "Desativado"}</span></div>
       <div class="data-actions"><button class="small-btn" data-edit-partner="${partner.id}">Editar</button></div>
@@ -207,6 +207,7 @@ function resetPartnerForm() {
   $("partnerForm").reset();
   $("partnerId").value = "";
   $("partnerActive").checked = true;
+  $("partnerPublicVisible").checked = true;
   $("partnerAccessCode").required = true;
   $("partnerPasswordHint").textContent = "mínimo 6 caracteres";
   $("partnerEditorTitle").textContent = "Novo parceiro";
@@ -221,6 +222,12 @@ function editPartner(id) {
   $("partnerAccessCode").value = "";
   $("partnerAccessCode").required = false;
   $("partnerActive").checked = Boolean(partner.active);
+  $("partnerCategory").value = partner.category || "Pet shop";
+  $("partnerPhone").value = partner.phone || "";
+  $("partnerAddress").value = partner.address || "";
+  $("partnerInstagram").value = partner.instagram || "";
+  $("partnerDescription").value = partner.description || "";
+  $("partnerPublicVisible").checked = Boolean(partner.public_visible);
   $("partnerPasswordHint").textContent = "deixe em branco para manter";
   $("partnerEditorTitle").textContent = "Editar parceiro";
   openEditor("partnerEditor");
@@ -231,7 +238,18 @@ $("newPartnerBtn").onclick = () => { resetPartnerForm(); openEditor("partnerEdit
 $("partnerForm").onsubmit = async event => {
   event.preventDefault();
   const id = $("partnerId").value;
-  const data = { name: $("partnerName").value, email: $("partnerEmail").value, access_code: $("partnerAccessCode").value, active: $("partnerActive").checked };
+  const data = {
+    name: $("partnerName").value,
+    email: $("partnerEmail").value,
+    access_code: $("partnerAccessCode").value,
+    active: $("partnerActive").checked,
+    category: $("partnerCategory").value,
+    phone: $("partnerPhone").value,
+    address: $("partnerAddress").value,
+    instagram: $("partnerInstagram").value,
+    description: $("partnerDescription").value,
+    public_visible: $("partnerPublicVisible").checked
+  };
   try {
     await request(id ? `/api/admin/club/partners/${id}` : "/api/admin/club/partners", { method: id ? "PUT" : "POST", body: JSON.stringify(data) });
     closeEditor("partnerEditor");
