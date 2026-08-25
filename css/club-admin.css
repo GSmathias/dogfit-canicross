@@ -16,6 +16,8 @@
 .small-btn{border:1px solid var(--line);background:#1c1c1c;color:#eee;border-radius:8px;padding:8px 10px;font-size:.76rem;font-weight:700}
 .small-btn:hover{border-color:rgba(255,106,0,.55)}
 .small-btn.orange{background:var(--orange);color:#111;border-color:var(--orange)}
+.small-btn.danger{border-color:rgba(255,77,77,.5);background:rgba(255,77,77,.08);color:#ff8585}
+.small-btn.danger:hover{border-color:#ff5d5d;background:rgba(255,77,77,.16)}
 .code-chip{font:800 .82rem/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--orange);letter-spacing:.04em}
 .value-highlight{font:800 1.25rem/1 "Barlow Condensed",sans-serif;color:var(--orange)}
 .empty-state{background:var(--panel)}

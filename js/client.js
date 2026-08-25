@@ -18,6 +18,7 @@ function dateBR(value, withTime = false) {
 
 function toast(message, isError = false) {
   const element = $("#clientToast");
+  if (!element) return;
   element.textContent = message;
   element.classList.toggle("error", isError);
   element.classList.add("show");
@@ -112,8 +113,6 @@ function renderPartners(items) {
 
 function renderDashboard(data) {
   dashboardData = data;
-  $("#authShell").hidden = true;
-  $("#clientDashboard").hidden = false;
   $("#welcomeName").textContent = `OLÁ, ${data.customer.full_name.split(/\s+/)[0]}`;
   $("#summaryRegistrations").textContent = data.registrations.length;
   $("#summaryPaid").textContent = data.registrations.filter(item => item.payment_status === "paid").length;
@@ -130,7 +129,8 @@ async function loadDashboard() {
   renderDashboard(data);
 }
 
-$("#loginForm").onsubmit = async event => {
+const loginForm = $("#loginForm");
+if (loginForm) loginForm.onsubmit = async event => {
   event.preventDefault();
   const error = $('[data-error="login"]'); error.textContent = "";
   try {
@@ -143,7 +143,8 @@ $("#loginForm").onsubmit = async event => {
   catch (caught) { error.textContent = caught.message; }
 };
 
-$("#registerForm").onsubmit = async event => {
+const registerForm = $("#registerForm");
+if (registerForm) registerForm.onsubmit = async event => {
   event.preventDefault();
   const error = $('[data-error="register"]'); error.textContent = "";
   try {
@@ -156,30 +157,43 @@ $("#registerForm").onsubmit = async event => {
   catch (caught) { error.textContent = caught.message; }
 };
 
-$("#profileForm").onsubmit = async event => {
+const profileForm = $("#profileForm");
+if (profileForm) profileForm.onsubmit = async event => {
   event.preventDefault();
   const error = $('[data-error="profile"]'); error.textContent = "";
   try { await request("/api/client/me", { method: "PUT", body: JSON.stringify(formObject(event.currentTarget)) }); await loadDashboard(); toast("Dados atualizados."); }
   catch (caught) { error.textContent = caught.message; }
 };
 
-$("#logoutButton").onclick = async () => {
+const logoutButton = $("#logoutButton");
+if (logoutButton) logoutButton.onclick = async () => {
   try { await request("/api/client/logout", { method: "POST" }); } catch {}
   location.assign("/cliente");
 };
 
-const onAccountPage = location.pathname === accountPath || location.pathname === `${accountPath}/`;
+const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
+const onAccountPage = normalizedPath === accountPath;
 
-loadDashboard()
-  .then(() => {
-    if (!onAccountPage) location.replace(accountPath);
-  })
-  .catch(caught => {
-    if (onAccountPage && caught.status === 401) {
-      location.replace("/cliente");
-      return;
+async function initClientArea() {
+  if (onAccountPage) {
+    try {
+      await loadDashboard();
+    } catch (caught) {
+      if (caught.status === 401) {
+        location.replace("/cliente");
+        return;
+      }
+      toast(caught.message, true);
     }
+    return;
+  }
+
+  try {
+    await request("/api/client/dashboard");
+    location.replace(accountPath);
+  } catch (caught) {
     if (caught.status !== 401) toast(caught.message, true);
-    $("#authShell").hidden = false;
-    $("#clientDashboard").hidden = true;
-  });
+  }
+}
+
+initClientArea();

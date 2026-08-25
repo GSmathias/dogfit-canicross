@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#080808">
+  <title>Minha Conta | DOGFIT CANICROSS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/client.css">
+</head>
+<body>
+  <header class="client-header">
+    <a class="client-brand" href="/"><strong>DOGFIT</strong><span>MINHA CONTA</span></a>
+    <a class="back-link" href="/">← Voltar ao site</a>
+  </header>
+
+  <main class="client-main">
+    <section class="dashboard" id="clientDashboard">
+      <div class="dashboard-heading">
+        <div><p class="eyebrow">BEM-VINDO À DOGFIT</p><h1 id="welcomeName">MINHA ÁREA</h1></div>
+        <button class="text-button" id="logoutButton" type="button">Sair</button>
+      </div>
+
+      <nav class="dashboard-tabs" aria-label="Minha área">
+        <button class="dashboard-tab active" data-view="overview" type="button">Visão geral</button>
+        <button class="dashboard-tab" data-view="profile" type="button">Meus dados</button>
+        <button class="dashboard-tab" data-view="registrations" type="button">Inscrições</button>
+        <button class="dashboard-tab" data-view="club" type="button">Clube</button>
+        <button class="dashboard-tab" data-view="partners" type="button">Credenciados</button>
+      </nav>
+
+      <div class="dashboard-view active" data-dashboard-view="overview">
+        <div class="summary-grid">
+          <article><span>Pré-inscrições</span><strong id="summaryRegistrations">0</strong><small>eventos registrados</small></article>
+          <article><span>Pagamentos</span><strong id="summaryPaid">0</strong><small>confirmados</small></article>
+          <article><span>Clube DOGFIT</span><strong id="summaryClub">—</strong><small id="summaryClubText">verificando cadastro</small></article>
+        </div>
+        <div class="notice-card"><strong>Vai participar do próximo evento?</strong><span>Faça a pré-inscrição direto pelo site e acompanhe a confirmação aqui.</span><a href="/#eventos">VER PRÓXIMO EVENTO →</a></div>
+      </div>
+
+      <div class="dashboard-view" data-dashboard-view="profile">
+        <div class="section-head"><div><p class="eyebrow">CADASTRO</p><h2>MEUS DADOS</h2></div><p>Esses dados poderão preencher suas próximas inscrições.</p></div>
+        <form id="profileForm" class="client-form profile-form">
+          <label class="wide"><span>Nome completo</span><input name="full_name" required maxlength="180"></label>
+          <label><span>Data de nascimento</span><input name="birth_date" type="date"></label>
+          <label><span>Contato</span><input name="phone" type="tel" required maxlength="30"></label>
+          <label class="wide"><span>E-mail da conta</span><input name="email" type="email" disabled></label>
+          <label><span>Nome do cachorro</span><input name="dog_name" maxlength="120"></label>
+          <label><span>Raça</span><input name="dog_breed" maxlength="120"></label>
+          <label><span>Quantidade de cães</span><input name="dog_count" type="number" min="1" max="10"></label>
+          <label><span>Sociabilidade</span><select name="sociability"><option value="social">Sociável</option><option value="selective">Seletivo</option><option value="reactive">Reativo/agressivo</option><option value="unknown">Não sei informar</option></select></label>
+          <p class="form-error wide" data-error="profile"></p>
+          <button class="primary-button wide" type="submit">SALVAR ALTERAÇÕES</button>
+        </form>
+      </div>
+
+      <div class="dashboard-view" data-dashboard-view="registrations">
+        <div class="section-head"><div><p class="eyebrow">EVENTOS</p><h2>MINHAS INSCRIÇÕES</h2></div></div>
+        <div class="card-list" id="registrationsList"></div>
+      </div>
+
+      <div class="dashboard-view" data-dashboard-view="club">
+        <div class="section-head"><div><p class="eyebrow">CLUBE DOGFIT</p><h2>MINHA CARTEIRINHA</h2></div></div>
+        <div id="memberArea"></div>
+      </div>
+
+      <div class="dashboard-view" data-dashboard-view="partners">
+        <div class="section-head"><div><p class="eyebrow">REDE CREDENCIADA</p><h2>PET SHOPS E CLÍNICAS</h2></div><p>Empresas parceiras onde membros ativos utilizam os benefícios DOGFIT.</p></div>
+        <div class="partner-grid" id="partnersList"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="clientToast" role="status"></div>
+  <script src="js/client.js"></script>
+</body>
+</html>

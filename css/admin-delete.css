@@ -1,0 +1,17 @@
+.editor-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.editor-actions .danger-button {
+  border: 1px solid rgba(255, 93, 93, .65);
+  background: rgba(255, 77, 77, .08);
+  color: #ff8585;
+}
+
+@media (max-width: 560px) {
+  .editor-actions {
+    grid-template-columns: 1fr;
+  }
+}

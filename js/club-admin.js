@@ -59,6 +59,17 @@ async function request(url, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
+async function removeRecord(url, confirmation, successMessage, refresh) {
+  if (!window.confirm(confirmation)) return;
+  try {
+    await request(url, { method: "DELETE" });
+    await refresh();
+    toast(successMessage);
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
 function switchView(name) {
   document.querySelectorAll(".club-view").forEach(view => view.classList.toggle("active", view.id === `${name}View`));
   document.querySelectorAll("[data-view]").forEach(item => item.classList.toggle("active", item.dataset.view === name));
@@ -112,12 +123,26 @@ function renderMembers() {
         <button class="small-btn orange" data-use-member="${member.id}">Registrar uso</button>
         <button class="small-btn" data-card="${escapeHtml(member.public_token)}">Carteirinha</button>
         <button class="small-btn" data-edit-member="${member.id}">Editar</button>
+        <button class="small-btn danger" data-delete-member="${member.id}">Excluir</button>
       </div>
     </article>
   `).join("");
   box.querySelectorAll("[data-edit-member]").forEach(button => button.onclick = () => editMember(Number(button.dataset.editMember)));
   box.querySelectorAll("[data-card]").forEach(button => button.onclick = () => window.open(`/clube/${button.dataset.card}`, "_blank", "noopener"));
   box.querySelectorAll("[data-use-member]").forEach(button => button.onclick = () => openRedemption(Number(button.dataset.useMember)));
+  box.querySelectorAll("[data-delete-member]").forEach(button => button.onclick = () => {
+    const member = state.members.find(item => item.id === Number(button.dataset.deleteMember));
+    removeRecord(
+      `/api/admin/club/members/${button.dataset.deleteMember}`,
+      `Excluir definitivamente ${member?.full_name || "este associado"}? Cupons individuais e utilizações vinculadas também poderão ser removidos.`,
+      "Associado excluído.",
+      async () => {
+        await Promise.all([loadMembers(), loadCoupons(), loadRedemptions(), loadDashboard()]);
+        fillMemberOptions();
+        fillRedemptionItems();
+      }
+    );
+  });
 }
 
 function resetMemberForm() {
@@ -197,10 +222,23 @@ function renderPartners() {
       <div class="data-primary"><strong>${escapeHtml(partner.name)}</strong><span>${escapeHtml(partner.category || "Parceiro")} · ${escapeHtml(partner.email)}</span></div>
       <div class="data-secondary"><strong>${Number(partner.redemptions || 0)}</strong><span>utilizações registradas</span></div>
       <div class="data-secondary"><span class="status-pill${partner.active ? "" : " off"}">${partner.active ? "Acesso ativo" : "Desativado"}</span></div>
-      <div class="data-actions"><button class="small-btn" data-edit-partner="${partner.id}">Editar</button></div>
+      <div class="data-actions"><button class="small-btn" data-edit-partner="${partner.id}">Editar</button><button class="small-btn danger" data-delete-partner="${partner.id}">Excluir</button></div>
     </article>
   `).join("");
   box.querySelectorAll("[data-edit-partner]").forEach(button => button.onclick = () => editPartner(Number(button.dataset.editPartner)));
+  box.querySelectorAll("[data-delete-partner]").forEach(button => button.onclick = () => {
+    const partner = state.partners.find(item => item.id === Number(button.dataset.deletePartner));
+    removeRecord(
+      `/api/admin/club/partners/${button.dataset.deletePartner}`,
+      `Excluir definitivamente ${partner?.name || "este parceiro"}? O acesso ao portal será removido.`,
+      "Parceiro excluído.",
+      async () => {
+        await Promise.all([loadPartners(), loadBenefits(), loadCoupons(), loadRedemptions(), loadDashboard()]);
+        fillPartnerOptions();
+        fillRedemptionItems();
+      }
+    );
+  });
 }
 
 function resetPartnerForm() {
@@ -278,10 +316,19 @@ function renderBenefits() {
       <div class="data-primary"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.description || "Sem descrição")}</span></div>
       <div class="data-secondary"><strong>${escapeHtml(item.partner_name || "DOGFIT")}</strong><span>${escapeHtml(item.usage_limit ? `${item.usage_limit} ${periodLabel(item.period)}` : periodLabel(item.period))}</span></div>
       <div class="data-secondary"><strong class="value-highlight">${escapeHtml(benefitValue(item))}</strong><span class="status-pill${item.active ? "" : " off"}">${item.active ? "Ativo" : "Inativo"}</span></div>
-      <div class="data-actions"><button class="small-btn" data-edit-benefit="${item.id}">Editar</button></div>
+      <div class="data-actions"><button class="small-btn" data-edit-benefit="${item.id}">Editar</button><button class="small-btn danger" data-delete-benefit="${item.id}">Excluir</button></div>
     </article>
   `).join("");
   box.querySelectorAll("[data-edit-benefit]").forEach(button => button.onclick = () => editBenefit(Number(button.dataset.editBenefit)));
+  box.querySelectorAll("[data-delete-benefit]").forEach(button => button.onclick = () => {
+    const item = state.benefits.find(value => value.id === Number(button.dataset.deleteBenefit));
+    removeRecord(
+      `/api/admin/club/benefits/${button.dataset.deleteBenefit}`,
+      `Excluir definitivamente o benefício “${item?.title || "selecionado"}”?`,
+      "Benefício excluído.",
+      async () => { await Promise.all([loadBenefits(), loadRedemptions()]); fillRedemptionItems(); }
+    );
+  });
 }
 
 function resetBenefitForm() {
@@ -308,10 +355,19 @@ function renderCoupons() {
       <div class="data-primary"><strong>${escapeHtml(item.title)}</strong><span class="code-chip">${escapeHtml(item.code)}</span></div>
       <div class="data-secondary"><strong>${escapeHtml(item.partner_name || "DOGFIT")}</strong><span>${escapeHtml(item.member_name || "Todos os associados")}</span></div>
       <div class="data-secondary"><strong class="value-highlight">${item.discount_type === "percentage" ? `${item.discount_value}%` : money(item.discount_value)}</strong><span>${Number(item.uses || 0)} uso(s) · ${item.active ? "ativo" : "inativo"}</span></div>
-      <div class="data-actions"><button class="small-btn" data-edit-coupon="${item.id}">Editar</button></div>
+      <div class="data-actions"><button class="small-btn" data-edit-coupon="${item.id}">Editar</button><button class="small-btn danger" data-delete-coupon="${item.id}">Excluir</button></div>
     </article>
   `).join("");
   box.querySelectorAll("[data-edit-coupon]").forEach(button => button.onclick = () => editCoupon(Number(button.dataset.editCoupon)));
+  box.querySelectorAll("[data-delete-coupon]").forEach(button => button.onclick = () => {
+    const item = state.coupons.find(value => value.id === Number(button.dataset.deleteCoupon));
+    removeRecord(
+      `/api/admin/club/coupons/${button.dataset.deleteCoupon}`,
+      `Excluir definitivamente o cupom “${item?.code || "selecionado"}”?`,
+      "Cupom excluído.",
+      async () => { await Promise.all([loadCoupons(), loadRedemptions(), loadDashboard()]); fillRedemptionItems(); }
+    );
+  });
 }
 
 function resetCouponForm() {
@@ -338,9 +394,17 @@ function renderRedemptions() {
       <div class="data-primary"><strong>${escapeHtml(item.full_name)}</strong><span class="code-chip">${escapeHtml(item.member_code)}</span></div>
       <div class="data-secondary"><strong>${escapeHtml(item.benefit_title || item.coupon_title || "Benefício")}</strong><span>${escapeHtml(item.coupon_code || item.partner_name || "DOGFIT")}</span></div>
       <div class="data-secondary"><strong>${escapeHtml(item.partner_name || "DOGFIT")}</strong><span>${escapeHtml(dateBR(item.redeemed_at, true))}</span></div>
-      <div class="data-actions"><span class="value-highlight">${escapeHtml(money(item.discount_amount))}</span></div>
+      <div class="data-actions"><span class="value-highlight">${escapeHtml(money(item.discount_amount))}</span><button class="small-btn danger" data-delete-redemption="${item.id}">Excluir</button></div>
     </article>
   `).join("");
+  box.querySelectorAll("[data-delete-redemption]").forEach(button => button.onclick = () => {
+    removeRecord(
+      `/api/admin/club/redemptions/${button.dataset.deleteRedemption}`,
+      "Excluir definitivamente este registro de utilização?",
+      "Utilização excluída.",
+      async () => { await Promise.all([loadRedemptions(), loadDashboard()]); }
+    );
+  });
 }
 
 $("redemptionSearch").oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadRedemptions($("redemptionSearch").value), 250); };

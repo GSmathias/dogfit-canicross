@@ -506,6 +506,13 @@ async function updateAdminRegistration(request, env, id) {
   return json(await env.DB.prepare("SELECT * FROM event_registrations WHERE id = ?").bind(id).first());
 }
 
+async function deleteAdminRegistration(env, id) {
+  const result = await env.DB.prepare("DELETE FROM event_registrations WHERE id = ?")
+    .bind(id).run();
+  if (!result.meta.changes) return error("Inscrição não encontrada.", 404);
+  return json({ ok: true });
+}
+
 export async function handlePublicEvent({ request, env, ctx, path, method }) {
   if (path === "/api/events/register" && method === "POST") {
     return registerForEvent(request, env);
@@ -544,8 +551,10 @@ export async function handleAdminRegistrations({ request, env, path, method }) {
     return listAdminRegistrations(request, env);
   }
   const match = path.match(/^\/api\/admin\/registrations\/(\d+)$/);
-  if (match && method === "PUT") {
-    return updateAdminRegistration(request, env, Number(match[1]));
+  if (match) {
+    const id = Number(match[1]);
+    if (method === "PUT") return updateAdminRegistration(request, env, id);
+    if (method === "DELETE") return deleteAdminRegistration(env, id);
   }
   return error("Rota de inscrições não encontrada.", 404);
 }

@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/registrations-admin.css">
+  <link rel="stylesheet" href="css/admin-delete.css">
 </head>
 <body>
   <aside class="admin-sidebar">
@@ -23,7 +24,7 @@
   </main>
   <div class="editor" id="registrationEditor" hidden>
     <div class="editor-backdrop" data-close></div>
-    <section class="editor-card"><button class="close" data-close type="button">×</button><p class="eyebrow">PRÉ-INSCRIÇÃO</p><h2 id="editorTitle">DETALHES</h2><div id="editorDetails" class="details"></div><form id="registrationStatusForm"><label><span>Status do pagamento</span><select name="payment_status"><option value="pending">Aguardando PIX</option><option value="paid">Pagamento confirmado</option><option value="cancelled">Cancelada</option></select></label><label><span>Observações internas</span><textarea name="notes" rows="4" maxlength="1000"></textarea></label><button type="submit">SALVAR ALTERAÇÃO</button></form></section>
+    <section class="editor-card"><button class="close" data-close type="button">×</button><p class="eyebrow">PRÉ-INSCRIÇÃO</p><h2 id="editorTitle">DETALHES</h2><div id="editorDetails" class="details"></div><form id="registrationStatusForm"><label><span>Status do pagamento</span><select name="payment_status"><option value="pending">Aguardando PIX</option><option value="paid">Pagamento confirmado</option><option value="cancelled">Cancelada</option></select></label><label><span>Observações internas</span><textarea name="notes" rows="4" maxlength="1000"></textarea></label><div class="editor-actions"><button type="submit">SALVAR ALTERAÇÃO</button><button class="danger-button" id="deleteRegistration" type="button">EXCLUIR INSCRIÇÃO</button></div></form></section>
   </div>
   <div class="toast" id="adminToast"></div>
   <script src="js/registrations-admin.js"></script>

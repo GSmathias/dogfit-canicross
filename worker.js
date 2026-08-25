@@ -129,7 +129,11 @@ export default {
       }
 
       if (path === "/minha-conta") {
-        return env.ASSETS.fetch(assetRequest(request, "/client"));
+        return env.ASSETS.fetch(assetRequest(request, "/account"));
+      }
+
+      if (path === "/account" || path === "/account.html" || path === "/account/") {
+        return Response.redirect(`${url.origin}/minha-conta`, 302);
       }
 
       if (path === "/parceiro.html" || path === "/parceiro/") {

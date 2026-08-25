@@ -498,6 +498,20 @@ async function listRedemptions(request, env, partnerId = undefined) {
   );
 }
 
+async function deleteAdminRecord(env, table, id, label) {
+  const allowedTables = new Set([
+    "club_members",
+    "club_partners",
+    "club_benefits",
+    "club_coupons",
+    "club_redemptions"
+  ]);
+  if (!allowedTables.has(table)) return badRequest("Tipo de registro inválido.");
+  const result = await env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
+  if (!result.meta.changes) return notFound(`${label} não encontrado.`);
+  return json({ ok: true });
+}
+
 export async function handleAdminClub({ request, env, path, method }) {
   if (path === "/api/admin/club/dashboard" && method === "GET") return adminDashboard(env);
   if (path === "/api/admin/club/members") {
@@ -505,32 +519,52 @@ export async function handleAdminClub({ request, env, path, method }) {
     if (method === "POST") return createMember(request, env);
   }
   const memberMatch = path.match(/^\/api\/admin\/club\/members\/(\d+)$/);
-  if (memberMatch && method === "PUT") return updateMember(request, env, Number(memberMatch[1]));
+  if (memberMatch) {
+    const id = Number(memberMatch[1]);
+    if (method === "PUT") return updateMember(request, env, id);
+    if (method === "DELETE") return deleteAdminRecord(env, "club_members", id, "Associado");
+  }
 
   if (path === "/api/admin/club/partners") {
     if (method === "GET") return listPartners(env);
     if (method === "POST") return savePartner(request, env);
   }
   const partnerMatch = path.match(/^\/api\/admin\/club\/partners\/(\d+)$/);
-  if (partnerMatch && method === "PUT") return savePartner(request, env, Number(partnerMatch[1]));
+  if (partnerMatch) {
+    const id = Number(partnerMatch[1]);
+    if (method === "PUT") return savePartner(request, env, id);
+    if (method === "DELETE") return deleteAdminRecord(env, "club_partners", id, "Parceiro");
+  }
 
   if (path === "/api/admin/club/benefits") {
     if (method === "GET") return listBenefits(env);
     if (method === "POST") return saveBenefit(request, env);
   }
   const benefitMatch = path.match(/^\/api\/admin\/club\/benefits\/(\d+)$/);
-  if (benefitMatch && method === "PUT") return saveBenefit(request, env, Number(benefitMatch[1]));
+  if (benefitMatch) {
+    const id = Number(benefitMatch[1]);
+    if (method === "PUT") return saveBenefit(request, env, id);
+    if (method === "DELETE") return deleteAdminRecord(env, "club_benefits", id, "Benefício");
+  }
 
   if (path === "/api/admin/club/coupons") {
     if (method === "GET") return listCoupons(env);
     if (method === "POST") return saveCoupon(request, env);
   }
   const couponMatch = path.match(/^\/api\/admin\/club\/coupons\/(\d+)$/);
-  if (couponMatch && method === "PUT") return saveCoupon(request, env, Number(couponMatch[1]));
+  if (couponMatch) {
+    const id = Number(couponMatch[1]);
+    if (method === "PUT") return saveCoupon(request, env, id);
+    if (method === "DELETE") return deleteAdminRecord(env, "club_coupons", id, "Cupom");
+  }
 
   if (path === "/api/admin/club/redemptions") {
     if (method === "GET") return listRedemptions(request, env);
     if (method === "POST") return redeem(request, env, null, true);
+  }
+  const redemptionMatch = path.match(/^\/api\/admin\/club\/redemptions\/(\d+)$/);
+  if (redemptionMatch && method === "DELETE") {
+    return deleteAdminRecord(env, "club_redemptions", Number(redemptionMatch[1]), "Utilização");
   }
   return notFound("Rota do Clube não encontrada.");
 }
