@@ -149,67 +149,136 @@ function registrationCode() {
   return `PRE-${new Date().getUTCFullYear()}-${randomHex(3).toUpperCase()}`;
 }
 
-function sociabilityLabel(value) {
-  return {
-    social: "Sociável",
-    selective: "Seletivo",
-    reactive: "Reativo/agressivo",
-    unknown: "Não informado"
-  }[value] || "Não informado";
+function eventAmount(value) {
+  let normalized = clean(value, 50).replace(/[^0-9,.-]/g, "");
+  if (normalized.includes(",")) {
+    normalized = normalized.replace(/\./g, "").replace(",", ".");
+  }
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) / 100 : 0;
 }
 
-async function notifyRegistrationWhatsApp(env, registration) {
-  const phoneNumberId = clean(env.WHATSAPP_PHONE_NUMBER_ID, 100);
-  const accessToken = clean(env.WHATSAPP_ACCESS_TOKEN, 1000);
-  if (!phoneNumberId || !accessToken) {
-    console.warn("Notificação WhatsApp não configurada: defina WHATSAPP_PHONE_NUMBER_ID e WHATSAPP_ACCESS_TOKEN.");
-    return;
+async function mercadoPagoRequest(env, pathname, options = {}) {
+  const accessToken = clean(env.MERCADOPAGO_ACCESS_TOKEN, 1000);
+  if (!accessToken) throw new Error("MERCADOPAGO_ACCESS_TOKEN_NOT_CONFIGURED");
+  const response = await fetch(`https://api.mercadopago.com${pathname}`, {
+    ...options,
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      ...(options.headers || {})
+    }
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.error("Erro Mercado Pago:", response.status, JSON.stringify(result));
+    throw new Error("MERCADOPAGO_REQUEST_FAILED");
   }
+  return result;
+}
 
-  const graphVersion = clean(env.WHATSAPP_GRAPH_VERSION, 20) || "v23.0";
-  const templateName = clean(env.WHATSAPP_TEMPLATE_NAME, 120) || "nova_pre_inscricao_dogfit";
-  const adminNumber = clean(env.WHATSAPP_ADMIN_NUMBER, 30).replace(/\D/g, "") || "5562994431333";
-  const parameters = [
-    registration.registration_code,
-    registration.full_name,
-    registration.event_title,
-    registration.phone,
-    registration.dog_name,
-    String(registration.dog_count),
-    sociabilityLabel(registration.sociability)
-  ].map(text => ({ type: "text", text: clean(text, 250) }));
-
-  try {
-    const response = await fetch(
-      `https://graph.facebook.com/${encodeURIComponent(graphVersion)}/${encodeURIComponent(phoneNumberId)}/messages`,
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${accessToken}`,
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: adminNumber,
-          type: "template",
-          template: {
-            name: templateName,
-            language: { code: "pt_BR" },
-            components: [{ type: "body", parameters }]
-          }
-        })
+async function createPaymentPreference(request, env, registration, event) {
+  const amount = eventAmount(event.price);
+  if (!amount) throw new Error("INVALID_EVENT_PRICE");
+  const origin = new URL(request.url).origin;
+  const nameParts = registration.full_name.split(/\s+/).filter(Boolean);
+  const firstName = nameParts.shift() || registration.full_name;
+  const surname = nameParts.join(" ") || firstName;
+  return mercadoPagoRequest(env, "/checkout/preferences", {
+    method: "POST",
+    headers: { "x-idempotency-key": crypto.randomUUID() },
+    body: JSON.stringify({
+      items: [{
+        id: registration.registration_code,
+        title: `Inscrição ${event.title}`.slice(0, 250),
+        description: `Participante: ${registration.full_name}`.slice(0, 250),
+        category_id: "tickets",
+        quantity: 1,
+        currency_id: "BRL",
+        unit_price: amount
+      }],
+      payer: {
+        name: firstName,
+        surname,
+        email: registration.email
+      },
+      external_reference: registration.registration_code,
+      statement_descriptor: "DOGFIT CANICROSS",
+      back_urls: {
+        success: `${origin}/pagamento/retorno`,
+        pending: `${origin}/?pagamento=pendente#eventos`,
+        failure: `${origin}/?pagamento=erro#eventos`
+      },
+      auto_return: "approved",
+      notification_url: `${origin}/api/payments/mercadopago`,
+      metadata: {
+        registration_code: registration.registration_code,
+        dog_name: registration.dog_name
       }
-    );
-    if (!response.ok) {
-      const detail = await response.text();
-      console.error("Falha ao enviar notificação WhatsApp:", response.status, detail);
+    })
+  });
+}
+
+async function paymentFromMercadoPago(env, paymentId) {
+  if (!/^\d+$/.test(String(paymentId || ""))) return null;
+  return mercadoPagoRequest(env, `/v1/payments/${paymentId}`, { method: "GET" });
+}
+
+async function confirmMercadoPagoPayment(env, payment) {
+  if (!payment || payment.status !== "approved") return false;
+  const code = clean(payment.external_reference, 80);
+  if (!/^PRE-\d{4}-[A-F0-9]{6}$/.test(code)) return false;
+  const reference = `Mercado Pago #${payment.id}`;
+  const result = await env.DB.prepare(`
+    UPDATE event_registrations
+    SET payment_status = 'paid',
+      notes = CASE
+        WHEN notes LIKE ? THEN notes
+        WHEN notes = '' THEN ?
+        ELSE notes || char(10) || ?
+      END,
+      updated_at = datetime('now')
+    WHERE registration_code = ?
+  `).bind(`%${reference}%`, reference, reference, code).run();
+  return Boolean(result.meta.changes);
+}
+
+function whatsappConfirmationUrl(code) {
+  const message = `Inscrição realizada com sucesso! Código: ${code}. Realizei o pagamento pelo Mercado Pago e gostaria de finalizar minha inscrição.`;
+  return `https://wa.me/5562994431333?text=${encodeURIComponent(message)}`;
+}
+
+async function handleMercadoPagoWebhook(request, env) {
+  const url = new URL(request.url);
+  const payload = request.method === "POST" ? await body(request) : null;
+  const paymentId = payload?.data?.id || url.searchParams.get("data.id") ||
+    url.searchParams.get("id");
+  if (!paymentId) return json({ ok: true });
+  try {
+    const payment = await paymentFromMercadoPago(env, paymentId);
+    await confirmMercadoPagoPayment(env, payment);
+  } catch (caught) {
+    console.error("Falha ao processar webhook Mercado Pago:", caught);
+  }
+  return json({ ok: true });
+}
+
+async function handlePaymentReturn(request, env) {
+  const url = new URL(request.url);
+  const paymentId = url.searchParams.get("payment_id") || url.searchParams.get("collection_id");
+  try {
+    const payment = await paymentFromMercadoPago(env, paymentId);
+    const confirmed = await confirmMercadoPagoPayment(env, payment);
+    if (confirmed || payment?.status === "approved") {
+      return Response.redirect(whatsappConfirmationUrl(clean(payment.external_reference, 80)), 302);
     }
   } catch (caught) {
-    console.error("Erro ao enviar notificação WhatsApp:", caught);
+    console.error("Falha ao validar retorno Mercado Pago:", caught);
   }
+  return Response.redirect(`${url.origin}/?pagamento=pendente#eventos`, 302);
 }
 
-async function registerForEvent(request, env, ctx) {
+async function registerForEvent(request, env) {
   const data = await body(request);
   const email = normalizeEmail(data?.email);
   const dogCount = Math.max(1, Math.min(10, Number.parseInt(data?.dog_count, 10) || 1));
@@ -240,6 +309,15 @@ async function registerForEvent(request, env, ctx) {
   let code = registrationCode();
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
+      const registration = {
+        registration_code: code,
+        full_name: clean(data.full_name, 180),
+        email,
+        phone: clean(data.phone, 30),
+        dog_name: clean(data.dog_name, 120),
+        dog_count: dogCount,
+        sociability
+      };
       await env.DB.prepare(`
         INSERT INTO event_registrations (
           registration_code, customer_id, event_title, event_date, event_time,
@@ -253,20 +331,24 @@ async function registerForEvent(request, env, ctx) {
         clean(data.phone, 30), email, clean(data.dog_name, 120),
         clean(data.dog_breed, 120), dogCount, sociability
       ).run();
-      const notification = notifyRegistrationWhatsApp(env, {
-        registration_code: code,
-        full_name: clean(data.full_name, 180),
-        event_title: event.title,
-        phone: clean(data.phone, 30),
-        dog_name: clean(data.dog_name, 120),
-        dog_count: dogCount,
-        sociability
-      });
-      if (ctx?.waitUntil) ctx.waitUntil(notification);
+      let preference;
+      try {
+        preference = await createPaymentPreference(request, env, registration, event);
+      } catch (paymentError) {
+        await env.DB.prepare("DELETE FROM event_registrations WHERE registration_code = ?")
+          .bind(code).run();
+        if (String(paymentError).includes("NOT_CONFIGURED")) {
+          return error("Pagamento ainda não configurado. Entre em contato com a DOGFIT.", 503);
+        }
+        if (String(paymentError).includes("INVALID_EVENT_PRICE")) {
+          return error("O valor do próximo evento precisa ser corrigido pela DOGFIT.", 503);
+        }
+        return error("Não foi possível abrir o pagamento. Tente novamente.", 502);
+      }
       return json({
         ok: true,
         registration_code: code,
-        pix_key: "047.652.591-88",
+        payment_url: preference.init_point,
         message: "Pré-inscrição realizada com sucesso!"
       }, 201);
     } catch (caught) {
@@ -426,9 +508,19 @@ async function updateAdminRegistration(request, env, id) {
 
 export async function handlePublicEvent({ request, env, ctx, path, method }) {
   if (path === "/api/events/register" && method === "POST") {
-    return registerForEvent(request, env, ctx);
+    return registerForEvent(request, env);
   }
   return error("Rota não encontrada.", 404);
+}
+
+export async function handlePayments({ request, env, path, method }) {
+  if (path === "/api/payments/mercadopago" && (method === "POST" || method === "GET")) {
+    return handleMercadoPagoWebhook(request, env);
+  }
+  if (path === "/pagamento/retorno" && method === "GET") {
+    return handlePaymentReturn(request, env);
+  }
+  return error("Rota de pagamento não encontrada.", 404);
 }
 
 export async function handleClient({ request, env, path, method }) {

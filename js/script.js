@@ -231,27 +231,19 @@ registrationForm?.addEventListener("submit", async event => {
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Não foi possível realizar a pré-inscrição.");
+    if (!result.payment_url) throw new Error("O pagamento não foi disponibilizado. Tente novamente.");
     document.getElementById("registrationCode").textContent = result.registration_code;
+    document.getElementById("registrationPaymentLink").href = result.payment_url;
     registrationFormView.hidden = true;
     registrationSuccess.hidden = false;
     registrationSuccess.scrollIntoView({ block: "start" });
     registrationForm.reset();
+    setTimeout(() => location.assign(result.payment_url), 1200);
   } catch (caught) {
     registrationError.textContent = caught.message;
   } finally {
     registrationSubmit.disabled = false;
     registrationSubmit.innerHTML = 'ENVIAR PRÉ-INSCRIÇÃO <span>→</span>';
-  }
-});
-
-document.querySelector("[data-copy-pix]")?.addEventListener("click", async event => {
-  try {
-    await navigator.clipboard.writeText("047.652.591-88");
-    const label = event.currentTarget.querySelector("span");
-    label.textContent = "PIX COPIADO!";
-    setTimeout(() => { label.textContent = "TOQUE PARA COPIAR"; }, 2200);
-  } catch {
-    window.prompt("Copie a chave PIX:", "047.652.591-88");
   }
 });
 

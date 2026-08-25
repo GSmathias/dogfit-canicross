@@ -10,6 +10,7 @@ import {
 import {
   handleAdminRegistrations,
   handleClient,
+  handlePayments,
   handlePublicEvent
 } from "./functions/api/clients.js";
 
@@ -161,6 +162,10 @@ export default {
 
       if (path.startsWith("/api/events/")) {
         return handlePublicEvent({ request, env, ctx, path, method });
+      }
+
+      if (path.startsWith("/api/payments/") || path === "/pagamento/retorno") {
+        return handlePayments({ request, env, ctx, path, method });
       }
 
       if (path.startsWith("/api/client/")) {

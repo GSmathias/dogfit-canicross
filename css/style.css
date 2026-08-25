@@ -2097,6 +2097,7 @@ body.modal-open {
 }
 
 .pix-copy {
+  display: block;
   width: min(100%, 480px);
   margin: 5px auto 17px;
   padding: 18px;
@@ -2104,6 +2105,7 @@ body.modal-open {
   color: white;
   background: rgba(255,103,0,.08);
   cursor: pointer;
+  text-decoration: none;
 }
 
 .pix-copy small,

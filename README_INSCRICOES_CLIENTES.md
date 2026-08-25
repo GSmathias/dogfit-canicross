@@ -4,7 +4,7 @@
 
 - Navegação por abas no celular: Eventos, Clube, Produtos, Performance, Passeador e Galeria.
 - Formulário de pré-inscrição no próprio site.
-- Confirmação com chave PIX `047.652.591-88` e código único da pré-inscrição.
+- Redirecionamento ao Checkout Pro do Mercado Pago com código único da pré-inscrição.
 - `/cliente`: página exclusiva para cadastro e login.
 - `/minha-conta`: dados salvos, histórico, carteirinha e rede credenciada após o login.
 - `/inscricoes-admin`: painel privado para confirmar PIX, cancelar e exportar inscrições.
@@ -36,31 +36,22 @@ Após o deploy, confira:
 
 O vínculo com o Clube é automático quando o e-mail da conta do cliente é igual ao e-mail do associado.
 
-## Notificação automática pelo WhatsApp
+## Pagamento pelo Mercado Pago
 
-O Worker está preparado para enviar uma mensagem automática usando a API oficial do WhatsApp da Meta. Crie e aprove, no WhatsApp Manager, um modelo de utilidade com:
+Depois de salvar a pré-inscrição, o Worker cria uma preferência do Checkout Pro com o valor do próximo evento cadastrado no painel. O cliente é enviado ao Mercado Pago e, quando o pagamento é aprovado, retorna automaticamente para o WhatsApp `5562994431333` com o código da inscrição.
 
-- Nome: `nova_pre_inscricao_dogfit`
-- Idioma: Português (Brasil)
-- Corpo:
+O webhook também confirma o pagamento no painel `/inscricoes-admin`.
 
-```text
-Nova pré-inscrição DOGFIT CANICROSS.
-Código: {{1}}
-Participante: {{2}}
-Evento: {{3}}
-Contato: {{4}}
-Cão: {{5}}
-Quantidade de cães: {{6}}
-Sociabilidade: {{7}}
-```
-
-Depois configure os dados da Cloud API sem colocá-los no GitHub:
+Obtenha o **Access Token de produção** em Mercado Pago > Suas integrações > Credenciais de produção. Não coloque o token no GitHub. Configure-o diretamente na Cloudflare:
 
 ```bash
-npx wrangler secret put WHATSAPP_PHONE_NUMBER_ID
-npx wrangler secret put WHATSAPP_ACCESS_TOKEN
-npx wrangler secret put WHATSAPP_ADMIN_NUMBER
+npx wrangler secret put MERCADOPAGO_ACCESS_TOKEN
 ```
 
-Em `WHATSAPP_ADMIN_NUMBER`, informe `5562994431333`. Depois faça um novo deploy com `npx wrangler deploy`.
+Cole o token quando o terminal solicitar e faça um novo deploy:
+
+```bash
+npx wrangler deploy
+```
+
+Antes de testar, confirme no painel administrativo que o valor do próximo evento está preenchido, por exemplo `35,00`.
