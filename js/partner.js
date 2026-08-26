@@ -18,7 +18,11 @@ function dateBR(value) {
 }
 
 function parseMoney(value) {
-  const number = Number(String(value || "0").replace(/\./g, "").replace(",", "."));
+  let normalized = String(value || "0").trim().replace(/[^0-9,.-]/g, "");
+  if (normalized.includes(",")) {
+    normalized = normalized.replace(/\./g, "").replace(",", ".");
+  }
+  const number = Number(normalized);
   return Number.isFinite(number) ? number : 0;
 }
 

@@ -21,7 +21,11 @@ function escapeHtml(value) {
 
 function number(value) {
   if (value === "" || value == null) return null;
-  const result = Number(String(value).replace(/\./g, "").replace(",", "."));
+  let normalized = String(value).trim().replace(/[^0-9,.-]/g, "");
+  if (normalized.includes(",")) {
+    normalized = normalized.replace(/\./g, "").replace(",", ".");
+  }
+  const result = Number(normalized);
   return Number.isFinite(result) ? result : null;
 }
 

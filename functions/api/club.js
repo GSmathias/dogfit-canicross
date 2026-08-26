@@ -507,6 +507,27 @@ async function deleteAdminRecord(env, table, id, label) {
     "club_redemptions"
   ]);
   if (!allowedTables.has(table)) return badRequest("Tipo de registro inválido.");
+
+  // club_redemptions exige que benefício OU cupom continue preenchido.
+  // Como as FKs de benefício/cupom usam ON DELETE SET NULL, apagar um item
+  // já utilizado quebraria o CHECK da tabela. Removemos antes somente os
+  // históricos ligados ao registro que está sendo excluído.
+  const dependentField = table === "club_benefits"
+    ? "benefit_id"
+    : table === "club_coupons"
+      ? "coupon_id"
+      : null;
+
+  if (dependentField) {
+    const results = await env.DB.batch([
+      env.DB.prepare(`DELETE FROM club_redemptions WHERE ${dependentField} = ?`).bind(id),
+      env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id)
+    ]);
+    const deleteResult = results[1];
+    if (!deleteResult?.meta?.changes) return notFound(`${label} não encontrado.`);
+    return json({ ok: true });
+  }
+
   const result = await env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
   if (!result.meta.changes) return notFound(`${label} não encontrado.`);
   return json({ ok: true });

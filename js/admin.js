@@ -73,7 +73,10 @@ function escapeHtml(value) {
 
 function parseMoney(value) {
   if (value === "" || value == null) return null;
-  const normalized = String(value).trim().replace(/\./g, "").replace(",", ".");
+  let normalized = String(value).trim().replace(/[^0-9,.-]/g, "");
+  if (normalized.includes(",")) {
+    normalized = normalized.replace(/\./g, "").replace(",", ".");
+  }
   const n = Number(normalized);
   return Number.isFinite(n) ? n : null;
 }
