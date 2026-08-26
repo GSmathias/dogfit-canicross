@@ -53,6 +53,22 @@
           <p class="form-error wide" data-error="register"></p>
           <button class="primary-button wide" type="submit">CRIAR MINHA CONTA →</button>
         </form>
+
+        <form id="verifyForm" class="client-form auth-form verification-form">
+          <div class="verification-copy wide">
+            <p class="eyebrow">CONFIRMAÇÃO DE E-MAIL</p>
+            <h2>CONFIRA SUA CAIXA DE ENTRADA</h2>
+            <p id="verificationMessage">Enviamos um código de 6 dígitos. Ele expira em 15 minutos.</p>
+          </div>
+          <label class="wide"><span>E-mail</span><input name="email" type="email" readonly></label>
+          <label class="wide"><span>Código de confirmação</span><input name="code" class="verification-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required placeholder="000000"></label>
+          <p class="form-error wide" data-error="verify"></p>
+          <button class="primary-button wide" type="submit">CONFIRMAR E-MAIL →</button>
+          <div class="verification-actions wide">
+            <button class="text-button" id="resendVerification" type="button">Reenviar código</button>
+            <button class="text-button" id="backToLogin" type="button">Voltar para entrar</button>
+          </div>
+        </form>
       </div>
     </section>
 

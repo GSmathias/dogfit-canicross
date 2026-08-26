@@ -32,7 +32,7 @@ async function request(url, options = {}) {
     ...options
   });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error(result.error || "Não foi possível concluir."), { status: response.status });
+  if (!response.ok) throw Object.assign(new Error(result.error || "Não foi possível concluir."), { status: response.status, code: result.code || "" });
   return result;
 }
 
@@ -60,6 +60,26 @@ function fillForm(form, customer) {
     const field = form.elements[name];
     if (field) field.value = value ?? "";
   });
+}
+
+function showVerification(email, message = "") {
+  $$('[data-auth]').forEach(item => item.classList.remove("active"));
+  $$('.auth-form').forEach(form => form.classList.remove("active"));
+  const form = $("#verifyForm");
+  if (!form) return;
+  form.classList.add("active");
+  form.elements.email.value = String(email || "").trim().toLowerCase();
+  form.elements.code.value = "";
+  const copy = $("#verificationMessage");
+  if (copy) copy.textContent = message || "Enviamos um código de 6 dígitos. Ele expira em 15 minutos.";
+  $('[data-error="verify"]').textContent = "";
+  form.elements.code.focus();
+}
+
+function showLogin() {
+  $$('[data-auth]').forEach(item => item.classList.toggle("active", item.dataset.auth === "login"));
+  $$('.auth-form').forEach(form => form.classList.toggle("active", form.id === "loginForm"));
+  $('[data-error="login"]').textContent = "";
 }
 
 function paymentLabel(status) {
@@ -140,7 +160,13 @@ if (loginForm) loginForm.onsubmit = async event => {
     });
     location.assign(accountPath);
   }
-  catch (caught) { error.textContent = caught.message; }
+  catch (caught) {
+    if (caught.code === "EMAIL_NOT_VERIFIED") {
+      showVerification(event.currentTarget.elements.email.value, caught.message);
+      return;
+    }
+    error.textContent = caught.message;
+  }
 };
 
 const registerForm = $("#registerForm");
@@ -148,14 +174,62 @@ if (registerForm) registerForm.onsubmit = async event => {
   event.preventDefault();
   const error = $('[data-error="register"]'); error.textContent = "";
   try {
-    await request("/api/client/register", {
+    const result = await request("/api/client/register", {
       method: "POST",
       body: JSON.stringify(formObject(event.currentTarget))
     });
+    if (result.verification_required) {
+      showVerification(result.email, result.message);
+      return;
+    }
     location.assign(accountPath);
   }
-  catch (caught) { error.textContent = caught.message; }
+  catch (caught) {
+    if (caught.code === "EMAIL_PENDING") {
+      showVerification(event.currentTarget.elements.email.value, "Este e-mail já foi cadastrado e ainda precisa ser confirmado. Solicite um novo código abaixo.");
+      return;
+    }
+    error.textContent = caught.message;
+  }
 };
+
+const verifyForm = $("#verifyForm");
+if (verifyForm) verifyForm.onsubmit = async event => {
+  event.preventDefault();
+  const error = $('[data-error="verify"]'); error.textContent = "";
+  try {
+    await request("/api/client/verify-email", {
+      method: "POST",
+      body: JSON.stringify({
+        email: event.currentTarget.elements.email.value,
+        code: event.currentTarget.elements.code.value
+      })
+    });
+    location.assign(accountPath);
+  } catch (caught) {
+    error.textContent = caught.message;
+  }
+};
+
+const resendVerification = $("#resendVerification");
+if (resendVerification) resendVerification.onclick = async () => {
+  const error = $('[data-error="verify"]'); error.textContent = "";
+  resendVerification.disabled = true;
+  try {
+    const result = await request("/api/client/resend-verification", {
+      method: "POST",
+      body: JSON.stringify({ email: verifyForm.elements.email.value })
+    });
+    toast(result.message || "Novo código enviado.");
+  } catch (caught) {
+    error.textContent = caught.message;
+  } finally {
+    resendVerification.disabled = false;
+  }
+};
+
+const backToLogin = $("#backToLogin");
+if (backToLogin) backToLogin.onclick = showLogin;
 
 const profileForm = $("#profileForm");
 if (profileForm) profileForm.onsubmit = async event => {

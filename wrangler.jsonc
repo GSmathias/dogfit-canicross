@@ -9,6 +9,10 @@
     "enabled": true
   },
 
+  "vars": {
+    "RESEND_FROM_EMAIL": "DOGFIT CANICROSS <contato@dogfitcanicross.com.br>"
+  },
+
   "assets": {
     "directory": ".",
     "binding": "ASSETS",

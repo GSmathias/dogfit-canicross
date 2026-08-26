@@ -14,8 +14,28 @@ function validEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function validFullName(value) {
+  const parts = clean(value, 180).split(/\s+/).filter(Boolean);
+  return parts.length >= 2 && parts.every(part => part.length >= 2);
+}
+
+function validPhone(value) {
+  const digits = clean(value, 30).replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 13;
+}
+
 function validDate(value) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return "";
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day, 12));
+  if (
+    year < 1900 ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day ||
+    date > new Date()
+  ) return "";
+  return value;
 }
 
 function json(data, status = 200, headers = {}) {
@@ -25,8 +45,8 @@ function json(data, status = 200, headers = {}) {
   });
 }
 
-function error(message, status = 400) {
-  return json({ error: message }, status);
+function error(message, status = 400, code = "") {
+  return json({ error: message, ...(code ? { code } : {}) }, status);
 }
 
 async function body(request) {
@@ -83,6 +103,7 @@ async function customerFromRequest(request, env) {
     FROM customer_sessions s
     JOIN customer_accounts a ON a.id = s.customer_id
     WHERE s.token_hash = ? AND s.expires_at > datetime('now')
+      AND a.email_verified_at IS NOT NULL
   `).bind(tokenHash).first();
 }
 
@@ -96,7 +117,8 @@ function publicCustomer(customer) {
     dog_name: customer.dog_name,
     dog_breed: customer.dog_breed,
     dog_count: customer.dog_count,
-    sociability: customer.sociability
+    sociability: customer.sociability,
+    email_verified: Boolean(customer.email_verified_at)
   };
 }
 
@@ -117,11 +139,92 @@ async function createSession(env, customerId) {
   return token;
 }
 
+function verificationCode() {
+  const values = crypto.getRandomValues(new Uint32Array(1));
+  return String(100000 + (values[0] % 900000));
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+async function sendVerificationEmail(env, customer, code) {
+  const apiKey = clean(env.RESEND_API_KEY, 1000);
+  const from = clean(env.RESEND_FROM_EMAIL, 250);
+  if (!apiKey || !from) throw new Error("EMAIL_SERVICE_NOT_CONFIGURED");
+
+  const firstName = escapeHtml(clean(customer.full_name, 180).split(/\s+/)[0] || "participante");
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+      "Idempotency-Key": `dogfit-email-verify/${customer.id}/${code}`
+    },
+    body: JSON.stringify({
+      from,
+      to: [customer.email],
+      subject: "Confirme seu e-mail na DOGFIT CANICROSS",
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;background:#0b0b0b;color:#f5f5f2;padding:32px;border-radius:12px">
+          <div style="font-size:13px;font-weight:800;letter-spacing:.14em;color:#ff6700">DOGFIT CANICROSS</div>
+          <h1 style="font-size:26px;margin:14px 0 8px">Confirme seu e-mail</h1>
+          <p style="color:#c9c9c4;line-height:1.6">Olá, ${firstName}. Use o código abaixo para confirmar que este e-mail pertence a você.</p>
+          <div style="font-size:36px;font-weight:900;letter-spacing:.18em;background:#171717;border:1px solid #343434;padding:18px;text-align:center;margin:24px 0;color:#ff6700">${code}</div>
+          <p style="color:#c9c9c4;line-height:1.6">O código expira em 15 minutos. Se você não criou uma conta na DOGFIT, ignore esta mensagem.</p>
+        </div>`
+    })
+  });
+  if (!response.ok) {
+    console.error("Falha ao enviar verificação de e-mail:", response.status, await response.text().catch(() => ""));
+    throw new Error("EMAIL_SEND_FAILED");
+  }
+}
+
+async function issueVerificationCode(env, customer, { enforceCooldown = false } = {}) {
+  if (enforceCooldown) {
+    const recent = await env.DB.prepare(`
+      SELECT 1 AS recent FROM customer_email_verifications
+      WHERE customer_id = ? AND last_sent_at > datetime('now', '-60 seconds')
+    `).bind(customer.id).first();
+    if (recent) throw new Error("EMAIL_COOLDOWN");
+  }
+
+  const code = verificationCode();
+  const codeHash = await sha256(`${customer.email}:${code}`);
+  await env.DB.prepare(`
+    INSERT INTO customer_email_verifications (
+      customer_id, code_hash, expires_at, attempts, last_sent_at, created_at
+    ) VALUES (?, ?, datetime('now', '+15 minutes'), 0, datetime('now'), datetime('now'))
+    ON CONFLICT(customer_id) DO UPDATE SET
+      code_hash = excluded.code_hash,
+      expires_at = excluded.expires_at,
+      attempts = 0,
+      last_sent_at = excluded.last_sent_at
+  `).bind(customer.id, codeHash).run();
+  await sendVerificationEmail(env, customer, code);
+}
+
+async function linkCustomerHistory(env, customerId, email) {
+  await env.DB.batch([
+    env.DB.prepare("UPDATE event_registrations SET customer_id = ? WHERE customer_id IS NULL AND lower(email) = ?")
+      .bind(customerId, email),
+    env.DB.prepare("UPDATE club_members SET customer_id = ? WHERE customer_id IS NULL AND lower(email) = ?")
+      .bind(customerId, email)
+  ]);
+}
+
 function validateProfile(data, passwordRequired = false) {
   const email = normalizeEmail(data?.email);
-  if (!clean(data?.full_name, 180)) return "Informe o nome completo.";
+  if (!validFullName(data?.full_name)) return "Informe nome e sobrenome.";
   if (!validEmail(email)) return "Informe um e-mail válido.";
-  if (!clean(data?.phone, 30)) return "Informe um número para contato.";
+  if (!validPhone(data?.phone)) return "Informe um telefone válido com DDD.";
+  if (data?.birth_date && !validDate(data.birth_date)) return "Informe uma data de nascimento válida.";
   if (passwordRequired && clean(data?.password, 120).length < 8) {
     return "A senha precisa ter pelo menos 8 caracteres.";
   }
@@ -285,9 +388,9 @@ async function registerForEvent(request, env) {
   const sociability = ["social", "selective", "reactive", "unknown"].includes(data?.sociability)
     ? data.sociability : "unknown";
   const required = [
-    [clean(data?.full_name, 180), "Informe o nome completo."],
-    [validDate(data?.birth_date), "Informe a data de nascimento."],
-    [clean(data?.phone, 30), "Informe o número para contato."],
+    [validFullName(data?.full_name), "Informe nome e sobrenome."],
+    [validDate(data?.birth_date), "Informe uma data de nascimento válida."],
+    [validPhone(data?.phone), "Informe um telefone válido com DDD."],
     [validEmail(email), "Informe um e-mail válido."],
     [clean(data?.dog_name, 120), "Informe o nome do cachorro."],
     [clean(data?.dog_breed, 120), "Informe a raça do cachorro."]
@@ -303,9 +406,20 @@ async function registerForEvent(request, env) {
   const event = await currentEvent(env);
   if (event.status === "soldout") return error("As inscrições deste evento estão encerradas.", 409);
   const customer = await customerFromRequest(request, env);
-  const existing = customer || await env.DB.prepare(
-    "SELECT id FROM customer_accounts WHERE email = ?"
-  ).bind(email).first();
+  if (customer && email !== customer.email) {
+    return error("Use na inscrição o mesmo e-mail confirmado da sua conta DOGFIT.", 409, "ACCOUNT_EMAIL_MISMATCH");
+  }
+  const duplicate = await env.DB.prepare(`
+    SELECT id FROM event_registrations
+    WHERE lower(email) = ?
+      AND event_title = ?
+      AND COALESCE(event_date, '') = COALESCE(?, '')
+      AND payment_status <> 'cancelled'
+    LIMIT 1
+  `).bind(email, event.title, event.date).first();
+  if (duplicate) {
+    return error("Já existe uma pré-inscrição ativa com este e-mail para este evento.", 409, "DUPLICATE_REGISTRATION");
+  }
   let code = registrationCode();
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -326,7 +440,7 @@ async function registerForEvent(request, env) {
           recreational_terms_accepted, muzzle_terms_accepted, privacy_accepted
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 1)
       `).bind(
-        code, existing?.id || null, event.title, event.date, event.time,
+        code, customer?.id || null, event.title, event.date, event.time,
         event.location, event.price, clean(data.full_name, 180), data.birth_date,
         clean(data.phone, 30), email, clean(data.dog_name, 120),
         clean(data.dog_breed, 120), dogCount, sociability
@@ -367,10 +481,18 @@ async function registerCustomer(request, env) {
     return error("É necessário autorizar o armazenamento dos dados da conta.");
   }
   const email = normalizeEmail(data.email);
+  const existing = await env.DB.prepare("SELECT * FROM customer_accounts WHERE email = ?")
+    .bind(email).first();
+  if (existing) {
+    if (existing.email_verified_at) return error("Já existe uma conta com este e-mail.", 409, "EMAIL_EXISTS");
+    return error("Este e-mail já foi cadastrado, mas ainda precisa ser confirmado.", 409, "EMAIL_PENDING");
+  }
+
   const salt = randomHex(16);
   const hash = await passwordHash(clean(data.password, 120), salt);
   const sociability = ["social", "selective", "reactive", "unknown"].includes(data.sociability)
     ? data.sociability : "unknown";
+
   try {
     const result = await env.DB.prepare(`
       INSERT INTO customer_accounts (
@@ -384,19 +506,98 @@ async function registerCustomer(request, env) {
       sociability, salt, hash
     ).run();
     const customerId = result.meta.last_row_id;
-    await env.DB.batch([
-      env.DB.prepare("UPDATE event_registrations SET customer_id = ? WHERE customer_id IS NULL AND lower(email) = ?")
-        .bind(customerId, email),
-      env.DB.prepare("UPDATE club_members SET customer_id = ? WHERE customer_id IS NULL AND lower(email) = ?")
-        .bind(customerId, email)
-    ]);
-    const token = await createSession(env, customerId);
-    const customer = await env.DB.prepare("SELECT * FROM customer_accounts WHERE id = ?").bind(customerId).first();
-    return json({ customer: publicCustomer(customer) }, 201, { "Set-Cookie": sessionCookie(token) });
+    const customer = await env.DB.prepare("SELECT * FROM customer_accounts WHERE id = ?")
+      .bind(customerId).first();
+    try {
+      await issueVerificationCode(env, customer);
+    } catch (sendError) {
+      await env.DB.prepare("DELETE FROM customer_accounts WHERE id = ?").bind(customerId).run();
+      if (String(sendError).includes("NOT_CONFIGURED")) {
+        return error("A confirmação por e-mail ainda não foi configurada pela DOGFIT.", 503, "EMAIL_SERVICE_NOT_CONFIGURED");
+      }
+      return error("Não foi possível enviar o código de confirmação. Tente novamente.", 502, "EMAIL_SEND_FAILED");
+    }
+    return json({
+      verification_required: true,
+      email,
+      message: "Enviamos um código de 6 dígitos para confirmar seu e-mail."
+    }, 201);
   } catch (caught) {
-    if (String(caught).includes("UNIQUE")) return error("Já existe uma conta com este e-mail.", 409);
+    if (String(caught).includes("UNIQUE")) return error("Já existe uma conta com este e-mail.", 409, "EMAIL_EXISTS");
     throw caught;
   }
+}
+
+async function verifyCustomerEmail(request, env) {
+  const data = await body(request);
+  const email = normalizeEmail(data?.email);
+  const code = clean(data?.code, 12);
+  if (!validEmail(email) || !/^\d{6}$/.test(code)) {
+    return error("Informe o e-mail e o código de 6 dígitos.");
+  }
+
+  const customer = await env.DB.prepare("SELECT * FROM customer_accounts WHERE email = ?")
+    .bind(email).first();
+  if (!customer) return error("Código inválido ou expirado.", 400, "INVALID_VERIFICATION");
+  if (customer.email_verified_at) {
+    return error("Este e-mail já está confirmado. Entre usando sua senha.", 409, "EMAIL_ALREADY_VERIFIED");
+  }
+
+  const verification = await env.DB.prepare(`
+    SELECT * FROM customer_email_verifications WHERE customer_id = ?
+  `).bind(customer.id).first();
+  if (!verification) return error("Solicite um novo código de confirmação.", 410, "VERIFICATION_EXPIRED");
+  if (verification.attempts >= 5) {
+    return error("Muitas tentativas incorretas. Solicite um novo código.", 429, "VERIFICATION_LOCKED");
+  }
+  const notExpired = await env.DB.prepare(`
+    SELECT 1 AS valid FROM customer_email_verifications
+    WHERE customer_id = ? AND expires_at > datetime('now')
+  `).bind(customer.id).first();
+  if (!notExpired) return error("O código expirou. Solicite um novo código.", 410, "VERIFICATION_EXPIRED");
+
+  const candidate = await sha256(`${email}:${code}`);
+  if (!safeEqual(candidate, verification.code_hash)) {
+    await env.DB.prepare("UPDATE customer_email_verifications SET attempts = attempts + 1 WHERE customer_id = ?")
+      .bind(customer.id).run();
+    return error("Código incorreto.", 400, "INVALID_VERIFICATION");
+  }
+
+  await env.DB.batch([
+    env.DB.prepare("UPDATE customer_accounts SET email_verified_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
+      .bind(customer.id),
+    env.DB.prepare("DELETE FROM customer_email_verifications WHERE customer_id = ?").bind(customer.id)
+  ]);
+  await linkCustomerHistory(env, customer.id, email);
+  const token = await createSession(env, customer.id);
+  const verified = await env.DB.prepare("SELECT * FROM customer_accounts WHERE id = ?")
+    .bind(customer.id).first();
+  return json({ customer: publicCustomer(verified), verified: true }, 200, {
+    "Set-Cookie": sessionCookie(token)
+  });
+}
+
+async function resendCustomerVerification(request, env) {
+  const data = await body(request);
+  const email = normalizeEmail(data?.email);
+  if (!validEmail(email)) return error("Informe um e-mail válido.");
+  const customer = await env.DB.prepare("SELECT * FROM customer_accounts WHERE email = ?")
+    .bind(email).first();
+  if (!customer || customer.email_verified_at) {
+    return json({ ok: true, message: "Se houver uma confirmação pendente, um novo código será enviado." });
+  }
+  try {
+    await issueVerificationCode(env, customer, { enforceCooldown: true });
+  } catch (caught) {
+    if (String(caught).includes("EMAIL_COOLDOWN")) {
+      return error("Aguarde 1 minuto antes de solicitar outro código.", 429, "EMAIL_COOLDOWN");
+    }
+    if (String(caught).includes("NOT_CONFIGURED")) {
+      return error("A confirmação por e-mail ainda não foi configurada pela DOGFIT.", 503, "EMAIL_SERVICE_NOT_CONFIGURED");
+    }
+    return error("Não foi possível reenviar o código agora.", 502, "EMAIL_SEND_FAILED");
+  }
+  return json({ ok: true, message: "Novo código enviado. Verifique sua caixa de entrada e o spam." });
 }
 
 async function loginCustomer(request, env) {
@@ -409,12 +610,19 @@ async function loginCustomer(request, env) {
   if (!customer) return error("E-mail ou senha incorretos.", 401);
   const candidate = await passwordHash(password, customer.password_salt);
   if (!safeEqual(candidate, customer.password_hash)) return error("E-mail ou senha incorretos.", 401);
-  await env.DB.batch([
-    env.DB.prepare("UPDATE event_registrations SET customer_id = ? WHERE customer_id IS NULL AND lower(email) = ?")
-      .bind(customer.id, email),
-    env.DB.prepare("UPDATE club_members SET customer_id = ? WHERE customer_id IS NULL AND lower(email) = ?")
-      .bind(customer.id, email)
-  ]);
+  if (!customer.email_verified_at) {
+    try {
+      await issueVerificationCode(env, customer, { enforceCooldown: true });
+      return error("Confirme seu e-mail antes de entrar. Enviamos um novo código de confirmação.", 403, "EMAIL_NOT_VERIFIED");
+    } catch (caught) {
+      if (String(caught).includes("EMAIL_COOLDOWN")) {
+        return error("Confirme seu e-mail antes de entrar. Use o código que já enviamos ou solicite outro em instantes.", 403, "EMAIL_NOT_VERIFIED");
+      }
+      console.error("Falha ao reenviar verificação no login:", caught);
+      return error("Sua conta ainda precisa confirmar o e-mail. Não foi possível enviar o código agora; tente reenviar pela tela de confirmação.", 403, "EMAIL_NOT_VERIFIED");
+    }
+  }
+  await linkCustomerHistory(env, customer.id, email);
   const token = await createSession(env, customer.id);
   return json({ customer: publicCustomer(customer) }, 200, { "Set-Cookie": sessionCookie(token) });
 }
@@ -532,6 +740,8 @@ export async function handlePayments({ request, env, path, method }) {
 
 export async function handleClient({ request, env, path, method }) {
   if (path === "/api/client/register" && method === "POST") return registerCustomer(request, env);
+  if (path === "/api/client/verify-email" && method === "POST") return verifyCustomerEmail(request, env);
+  if (path === "/api/client/resend-verification" && method === "POST") return resendCustomerVerification(request, env);
   if (path === "/api/client/login" && method === "POST") return loginCustomer(request, env);
   const customer = await customerFromRequest(request, env);
   if (!customer) return error("Faça login para continuar.", 401);
