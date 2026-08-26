@@ -9,6 +9,7 @@ import {
 } from "./functions/api/club.js";
 import {
   handleAdminRegistrations,
+  handleAdminCustomers,
   handleClient,
   handlePayments,
   handlePublicEvent
@@ -204,6 +205,10 @@ export default {
 
         if (path.startsWith("/api/admin/registrations")) {
           return handleAdminRegistrations({ request, env, ctx, path, method });
+        }
+
+        if (path.startsWith("/api/admin/customers")) {
+          return handleAdminCustomers({ request, env, ctx, path, method });
         }
 
         if (path === "/api/admin/content") {

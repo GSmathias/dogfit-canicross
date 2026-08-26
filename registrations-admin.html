@@ -21,10 +21,25 @@
     <section class="stats"><article><span>Total</span><strong id="statTotal">0</strong></article><article><span>Aguardando PIX</span><strong id="statPending">0</strong></article><article><span>Pagos</span><strong id="statPaid">0</strong></article><article><span>Cães inscritos</span><strong id="statDogs">0</strong></article></section>
     <section class="toolbar"><input id="registrationSearch" placeholder="Buscar nome, e-mail, cão ou código..."><select id="registrationStatus"><option value="">Todos os status</option><option value="pending">Aguardando PIX</option><option value="paid">Pagamento confirmado</option><option value="cancelled">Cancelada</option></select></section>
     <div class="registration-list" id="adminRegistrations"></div>
+
+    <section class="customer-admin-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">ÁREA DO CLIENTE</p>
+          <h2>CONTAS DE CLIENTES</h2>
+          <p>Excluir uma inscrição remove somente aquela inscrição. Para liberar um e-mail e apagar a conta da Área do Cliente, exclua a conta aqui.</p>
+        </div>
+        <strong id="customerCount">0 contas</strong>
+      </div>
+      <div class="toolbar customer-toolbar">
+        <input id="customerSearch" placeholder="Buscar cliente por nome, e-mail, telefone ou cão...">
+      </div>
+      <div class="customer-list" id="adminCustomers"></div>
+    </section>
   </main>
   <div class="editor" id="registrationEditor" hidden>
     <div class="editor-backdrop" data-close></div>
-    <section class="editor-card"><button class="close" data-close type="button">×</button><p class="eyebrow">PRÉ-INSCRIÇÃO</p><h2 id="editorTitle">DETALHES</h2><div id="editorDetails" class="details"></div><form id="registrationStatusForm"><label><span>Status do pagamento</span><select name="payment_status"><option value="pending">Aguardando PIX</option><option value="paid">Pagamento confirmado</option><option value="cancelled">Cancelada</option></select></label><label><span>Observações internas</span><textarea name="notes" rows="4" maxlength="1000"></textarea></label><div class="editor-actions"><button type="submit">SALVAR ALTERAÇÃO</button><button class="danger-button" id="deleteRegistration" type="button">EXCLUIR INSCRIÇÃO</button></div></form></section>
+    <section class="editor-card"><button class="close" data-close type="button">×</button><p class="eyebrow">PRÉ-INSCRIÇÃO</p><h2 id="editorTitle">DETALHES</h2><div id="editorDetails" class="details"></div><form id="registrationStatusForm"><label><span>Status do pagamento</span><select name="payment_status"><option value="pending">Aguardando PIX</option><option value="paid">Pagamento confirmado</option><option value="cancelled">Cancelada</option></select></label><label><span>Observações internas</span><textarea name="notes" rows="4" maxlength="1000"></textarea></label><div class="editor-actions"><button type="submit">SALVAR ALTERAÇÃO</button><button class="danger-button" id="deleteRegistration" type="button">EXCLUIR INSCRIÇÃO</button></div><p class="delete-note">Excluir esta inscrição não apaga automaticamente a conta de cliente. A exclusão da conta é feita na seção “Contas de clientes”.</p></form></section>
   </div>
   <div class="toast" id="adminToast"></div>
   <script src="js/registrations-admin.js"></script>

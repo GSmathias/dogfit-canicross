@@ -234,7 +234,7 @@ function renderPartners() {
     const partner = state.partners.find(item => item.id === Number(button.dataset.deletePartner));
     removeRecord(
       `/api/admin/club/partners/${button.dataset.deletePartner}`,
-      `Excluir definitivamente ${partner?.name || "este parceiro"}? O acesso ao portal será removido.`,
+      `Excluir definitivamente ${partner?.name || "este parceiro"}? A conta do parceiro, sessões, benefícios, cupons e utilizações vinculadas serão removidos do banco.`,
       "Parceiro excluído.",
       async () => {
         await Promise.all([loadPartners(), loadBenefits(), loadCoupons(), loadRedemptions(), loadDashboard()]);

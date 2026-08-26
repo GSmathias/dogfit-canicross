@@ -481,17 +481,56 @@ async function registerCustomer(request, env) {
     return error("É necessário autorizar o armazenamento dos dados da conta.");
   }
   const email = normalizeEmail(data.email);
-  const existing = await env.DB.prepare("SELECT * FROM customer_accounts WHERE email = ?")
-    .bind(email).first();
-  if (existing) {
-    if (existing.email_verified_at) return error("Já existe uma conta com este e-mail.", 409, "EMAIL_EXISTS");
-    return error("Este e-mail já foi cadastrado, mas ainda precisa ser confirmado.", 409, "EMAIL_PENDING");
-  }
-
   const salt = randomHex(16);
   const hash = await passwordHash(clean(data.password, 120), salt);
   const sociability = ["social", "selective", "reactive", "unknown"].includes(data.sociability)
     ? data.sociability : "unknown";
+  const dogCount = Math.max(1, Math.min(10, Number.parseInt(data.dog_count, 10) || 1));
+
+  const existing = await env.DB.prepare("SELECT * FROM customer_accounts WHERE email = ?")
+    .bind(email).first();
+  if (existing) {
+    if (existing.email_verified_at) {
+      return error("Já existe uma conta confirmada com este e-mail. Entre usando sua senha.", 409, "EMAIL_EXISTS");
+    }
+
+    // Cadastro pendente não bloqueia mais o e-mail: reaproveita a mesma linha,
+    // substitui os dados pela tentativa atual e envia um código novo.
+    await env.DB.batch([
+      env.DB.prepare(`
+        UPDATE customer_accounts SET
+          full_name = ?, birth_date = ?, phone = ?, dog_name = ?, dog_breed = ?,
+          dog_count = ?, sociability = ?, password_salt = ?, password_hash = ?,
+          updated_at = datetime('now')
+        WHERE id = ?
+      `).bind(
+        clean(data.full_name, 180), validDate(data.birth_date) || null,
+        clean(data.phone, 30), clean(data.dog_name, 120), clean(data.dog_breed, 120),
+        dogCount, sociability, salt, hash, existing.id
+      ),
+      env.DB.prepare("DELETE FROM customer_email_verifications WHERE customer_id = ?")
+        .bind(existing.id),
+      env.DB.prepare("DELETE FROM customer_sessions WHERE customer_id = ?")
+        .bind(existing.id)
+    ]);
+
+    const refreshed = await env.DB.prepare("SELECT * FROM customer_accounts WHERE id = ?")
+      .bind(existing.id).first();
+    try {
+      await issueVerificationCode(env, refreshed);
+    } catch (sendError) {
+      if (String(sendError).includes("NOT_CONFIGURED")) {
+        return error("A confirmação por e-mail ainda não foi configurada pela DOGFIT.", 503, "EMAIL_SERVICE_NOT_CONFIGURED");
+      }
+      return error("Não foi possível enviar o código de confirmação. Tente novamente.", 502, "EMAIL_SEND_FAILED");
+    }
+    return json({
+      verification_required: true,
+      email,
+      restarted: true,
+      message: "Cadastro reiniciado. Enviamos um novo código de 6 dígitos para confirmar seu e-mail."
+    }, 200);
+  }
 
   try {
     const result = await env.DB.prepare(`
@@ -502,8 +541,7 @@ async function registerCustomer(request, env) {
     `).bind(
       email, clean(data.full_name, 180), validDate(data.birth_date) || null,
       clean(data.phone, 30), clean(data.dog_name, 120), clean(data.dog_breed, 120),
-      Math.max(1, Math.min(10, Number.parseInt(data.dog_count, 10) || 1)),
-      sociability, salt, hash
+      dogCount, sociability, salt, hash
     ).run();
     const customerId = result.meta.last_row_id;
     const customer = await env.DB.prepare("SELECT * FROM customer_accounts WHERE id = ?")
@@ -686,6 +724,52 @@ async function customerDashboard(env, customer) {
   });
 }
 
+async function listAdminCustomers(request, env) {
+  const url = new URL(request.url);
+  const query = clean(url.searchParams.get("q"), 100);
+  const like = `%${query}%`;
+  const { results } = await env.DB.prepare(`
+    SELECT
+      a.id, a.email, a.full_name, a.birth_date, a.phone, a.dog_name, a.dog_breed,
+      a.dog_count, a.sociability, a.email_verified_at, a.created_at, a.updated_at,
+      (SELECT COUNT(*) FROM event_registrations r
+        WHERE r.customer_id = a.id OR lower(r.email) = lower(a.email)) AS registration_count
+    FROM customer_accounts a
+    WHERE (? = '' OR a.full_name LIKE ? OR a.email LIKE ? OR a.phone LIKE ? OR a.dog_name LIKE ?)
+    ORDER BY a.created_at DESC
+    LIMIT 500
+  `).bind(query, like, like, like, like).all();
+  return json(results);
+}
+
+async function deleteAdminCustomer(env, id) {
+  const customer = await env.DB.prepare(
+    "SELECT id, email, full_name FROM customer_accounts WHERE id = ?"
+  ).bind(id).first();
+  if (!customer) return error("Conta de cliente não encontrada.", 404);
+
+  // Exclusão real da área do cliente. Remove também as inscrições ligadas a este
+  // e-mail para não deixar dados pessoais órfãos. Cadastro do Clube é uma área
+  // separada e apenas perde o vínculo com a conta.
+  const results = await env.DB.batch([
+    env.DB.prepare("DELETE FROM customer_email_verifications WHERE customer_id = ?").bind(id),
+    env.DB.prepare("DELETE FROM customer_sessions WHERE customer_id = ?").bind(id),
+    env.DB.prepare("DELETE FROM event_registrations WHERE customer_id = ? OR lower(email) = lower(?)")
+      .bind(id, customer.email),
+    env.DB.prepare("UPDATE club_members SET customer_id = NULL WHERE customer_id = ?").bind(id),
+    env.DB.prepare("DELETE FROM customer_accounts WHERE id = ?").bind(id)
+  ]);
+
+  const accountDelete = results[4];
+  if (!accountDelete?.meta?.changes) return error("Conta de cliente não encontrada.", 404);
+  return json({
+    ok: true,
+    deleted_customer_id: id,
+    deleted_email: customer.email,
+    deleted_registrations: Number(results[2]?.meta?.changes || 0)
+  });
+}
+
 async function listAdminRegistrations(request, env) {
   const url = new URL(request.url);
   const query = clean(url.searchParams.get("q"), 100);
@@ -743,6 +827,10 @@ export async function handleClient({ request, env, path, method }) {
   if (path === "/api/client/verify-email" && method === "POST") return verifyCustomerEmail(request, env);
   if (path === "/api/client/resend-verification" && method === "POST") return resendCustomerVerification(request, env);
   if (path === "/api/client/login" && method === "POST") return loginCustomer(request, env);
+  if (path === "/api/client/session" && method === "GET") {
+    const customer = await customerFromRequest(request, env);
+    return json({ authenticated: Boolean(customer) });
+  }
   const customer = await customerFromRequest(request, env);
   if (!customer) return error("Faça login para continuar.", 401);
   if (path === "/api/client/dashboard" && method === "GET") return customerDashboard(env, customer);
@@ -767,4 +855,15 @@ export async function handleAdminRegistrations({ request, env, path, method }) {
     if (method === "DELETE") return deleteAdminRegistration(env, id);
   }
   return error("Rota de inscrições não encontrada.", 404);
+}
+
+export async function handleAdminCustomers({ request, env, path, method }) {
+  if (path === "/api/admin/customers" && method === "GET") {
+    return listAdminCustomers(request, env);
+  }
+  const match = path.match(/^\/api\/admin\/customers\/(\d+)$/);
+  if (match && method === "DELETE") {
+    return deleteAdminCustomer(env, Number(match[1]));
+  }
+  return error("Rota de clientes não encontrada.", 404);
 }

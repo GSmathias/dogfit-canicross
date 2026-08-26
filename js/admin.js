@@ -533,7 +533,7 @@ $("productForm").addEventListener("submit", async e => {
 
 async function removeProduct(id) {
   const p = products.find(x => String(x.id) === String(id));
-  if (!confirm(`Excluir "${p?.name || "este produto"}"?`)) return;
+  if (!confirm(`Excluir definitivamente "${p?.name || "este produto"}"? O registro será apagado do banco e a imagem enviada pelo painel será removida do R2.`)) return;
 
   try {
     await api.deleteProduct(id);

@@ -508,10 +508,35 @@ async function deleteAdminRecord(env, table, id, label) {
   ]);
   if (!allowedTables.has(table)) return badRequest("Tipo de registro inválido.");
 
-  // club_redemptions exige que benefício OU cupom continue preenchido.
-  // Como as FKs de benefício/cupom usam ON DELETE SET NULL, apagar um item
-  // já utilizado quebraria o CHECK da tabela. Removemos antes somente os
-  // históricos ligados ao registro que está sendo excluído.
+  if (table === "club_partners") {
+    const results = await env.DB.batch([
+      env.DB.prepare(`
+        DELETE FROM club_redemptions
+        WHERE partner_id = ?
+          OR benefit_id IN (SELECT id FROM club_benefits WHERE partner_id = ?)
+          OR coupon_id IN (SELECT id FROM club_coupons WHERE partner_id = ?)
+      `).bind(id, id, id),
+      env.DB.prepare("DELETE FROM club_partner_sessions WHERE partner_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM club_benefits WHERE partner_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM club_coupons WHERE partner_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM club_partners WHERE id = ?").bind(id)
+    ]);
+    if (!results[4]?.meta?.changes) return notFound(`${label} não encontrado.`);
+    return json({ ok: true });
+  }
+
+  if (table === "club_members") {
+    const results = await env.DB.batch([
+      env.DB.prepare("DELETE FROM club_redemptions WHERE member_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM club_coupons WHERE member_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM club_members WHERE id = ?").bind(id)
+    ]);
+    if (!results[2]?.meta?.changes) return notFound(`${label} não encontrado.`);
+    return json({ ok: true });
+  }
+
+  // Benefícios e cupons já utilizados possuem histórico em club_redemptions.
+  // A ação "Excluir" é definitiva, então removemos também esses vínculos.
   const dependentField = table === "club_benefits"
     ? "benefit_id"
     : table === "club_coupons"
@@ -523,8 +548,7 @@ async function deleteAdminRecord(env, table, id, label) {
       env.DB.prepare(`DELETE FROM club_redemptions WHERE ${dependentField} = ?`).bind(id),
       env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id)
     ]);
-    const deleteResult = results[1];
-    if (!deleteResult?.meta?.changes) return notFound(`${label} não encontrado.`);
+    if (!results[1]?.meta?.changes) return notFound(`${label} não encontrado.`);
     return json({ ok: true });
   }
 

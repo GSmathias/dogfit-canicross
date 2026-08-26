@@ -152,17 +152,19 @@ async function loadDashboard() {
 const loginForm = $("#loginForm");
 if (loginForm) loginForm.onsubmit = async event => {
   event.preventDefault();
+  const form = event.currentTarget;
+  const email = form.elements.email?.value || "";
   const error = $('[data-error="login"]'); error.textContent = "";
   try {
     await request("/api/client/login", {
       method: "POST",
-      body: JSON.stringify(formObject(event.currentTarget))
+      body: JSON.stringify(formObject(form))
     });
     location.assign(accountPath);
   }
   catch (caught) {
     if (caught.code === "EMAIL_NOT_VERIFIED") {
-      showVerification(event.currentTarget.elements.email.value, caught.message);
+      showVerification(email, caught.message);
       return;
     }
     error.textContent = caught.message;
@@ -172,11 +174,13 @@ if (loginForm) loginForm.onsubmit = async event => {
 const registerForm = $("#registerForm");
 if (registerForm) registerForm.onsubmit = async event => {
   event.preventDefault();
+  const form = event.currentTarget;
+  const email = form.elements.email?.value || "";
   const error = $('[data-error="register"]'); error.textContent = "";
   try {
     const result = await request("/api/client/register", {
       method: "POST",
-      body: JSON.stringify(formObject(event.currentTarget))
+      body: JSON.stringify(formObject(form))
     });
     if (result.verification_required) {
       showVerification(result.email, result.message);
@@ -186,7 +190,7 @@ if (registerForm) registerForm.onsubmit = async event => {
   }
   catch (caught) {
     if (caught.code === "EMAIL_PENDING") {
-      showVerification(event.currentTarget.elements.email.value, "Este e-mail já foi cadastrado e ainda precisa ser confirmado. Solicite um novo código abaixo.");
+      showVerification(email, "Este e-mail já foi cadastrado e ainda precisa ser confirmado. Digite o código que enviamos ou solicite um novo abaixo.");
       return;
     }
     error.textContent = caught.message;
@@ -263,10 +267,10 @@ async function initClientArea() {
   }
 
   try {
-    await request("/api/client/dashboard");
-    location.replace(accountPath);
+    const session = await request("/api/client/session");
+    if (session.authenticated) location.replace(accountPath);
   } catch (caught) {
-    if (caught.status !== 401) toast(caught.message, true);
+    toast(caught.message, true);
   }
 }
 
