@@ -13,7 +13,9 @@ function dateBR(value, withTime = false) {
     ? `${value}T12:00:00`
     : value.replace(" ", "T") + (value.includes("Z") ? "" : "Z");
   const date = new Date(normalized);
-  return date.toLocaleDateString("pt-BR", withTime ? { dateStyle: "short", timeStyle: "short" } : undefined);
+  return withTime
+    ? date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+    : date.toLocaleDateString("pt-BR", { dateStyle: "short" });
 }
 
 function toast(message, isError = false) {

@@ -39,7 +39,9 @@ function dateBR(value, withTime = false) {
   const normalized = value.includes("T") ? value : value.replace(" ", "T") + (value.length === 10 ? "T00:00:00" : "Z");
   const parsed = new Date(normalized);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("pt-BR", withTime ? { dateStyle: "short", timeStyle: "short" } : undefined);
+  return withTime
+    ? parsed.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+    : parsed.toLocaleDateString("pt-BR", { dateStyle: "short" });
 }
 
 function toast(message, error = false) {
