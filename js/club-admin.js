@@ -425,28 +425,80 @@ function fillMemberOptions() {
   $("redemptionMember").innerHTML = '<option value="">Selecione</option>' + options;
 }
 
-function fillRedemptionItems() {
-  const benefits = state.benefits.filter(item => item.active).map(item => `<option value="benefit:${item.id}">Benefício · ${escapeHtml(item.title)}${item.partner_name ? ` (${escapeHtml(item.partner_name)})` : ""}</option>`).join("");
-  const coupons = state.coupons.filter(item => item.active).map(item => `<option value="coupon:${item.id}">Cupom · ${escapeHtml(item.code)} · ${escapeHtml(item.title)}</option>`).join("");
-  $("redemptionItem").innerHTML = `<option value="">Selecione</option><optgroup label="Benefícios">${benefits}</optgroup><optgroup label="Cupons">${coupons}</optgroup>`;
+function fillRedemptionItems(options = null) {
+  if (!options) {
+    $("redemptionItem").innerHTML = '<option value="">Selecione primeiro um associado</option>';
+    $("redemptionItem").disabled = true;
+    return;
+  }
+
+  const benefits = (options.benefits || [])
+    .filter(item => item.remaining == null || Number(item.remaining) > 0)
+    .map(item => {
+      const remaining = item.remaining == null
+        ? "disponível"
+        : `${item.remaining} de ${item.usage_limit} restante(s)`;
+      return `<option value="benefit:${item.id}">Benefício · ${escapeHtml(item.title)}${item.partner_name ? ` (${escapeHtml(item.partner_name)})` : ""} · ${escapeHtml(remaining)}</option>`;
+    }).join("");
+
+  const coupons = (options.coupons || [])
+    .filter(item => item.available)
+    .map(item => `<option value="coupon:${item.id}">Cupom · ${escapeHtml(item.code)} · ${escapeHtml(item.title)}</option>`)
+    .join("");
+
+  $("redemptionItem").innerHTML = `<option value="">Selecione</option><optgroup label="Benefícios disponíveis">${benefits || '<option disabled>Nenhum benefício disponível</option>'}</optgroup><optgroup label="Cupons disponíveis">${coupons || '<option disabled>Nenhum cupom disponível</option>'}</optgroup>`;
+  $("redemptionItem").disabled = false;
 }
 
-function openRedemption(memberId = null) {
+async function loadRedemptionOptions(memberId) {
+  const id = Number(memberId);
+  if (!Number.isInteger(id) || id <= 0) {
+    fillRedemptionItems(null);
+    return null;
+  }
+
+  $("redemptionItem").disabled = true;
+  $("redemptionItem").innerHTML = '<option value="">Carregando benefícios...</option>';
+  try {
+    const options = await request(`/api/admin/club/redemption-options?member_id=${id}`);
+    fillRedemptionItems(options);
+    return options;
+  } catch (error) {
+    $("redemptionItem").innerHTML = `<option value="">${escapeHtml(error.message)}</option>`;
+    $("redemptionItem").disabled = true;
+    toast(error.message, true);
+    return null;
+  }
+}
+
+async function openRedemption(memberId = null) {
   $("redemptionForm").reset();
-  if (memberId) $("redemptionMember").value = String(memberId);
   switchView("redemptions");
   openEditor("redemptionEditor");
+  fillRedemptionItems(null);
+  if (memberId) {
+    $("redemptionMember").value = String(memberId);
+    await loadRedemptionOptions(memberId);
+  }
 }
 
 $("newRedemptionBtn").onclick = () => openRedemption();
+$("redemptionMember").onchange = () => loadRedemptionOptions($("redemptionMember").value);
 $("redemptionForm").onsubmit = async event => {
   event.preventDefault();
-  const [kind, itemId] = $("redemptionItem").value.split(":");
+  const memberId = Number($("redemptionMember").value);
+  const selected = $("redemptionItem").value;
+  if (!Number.isInteger(memberId) || memberId <= 0) return toast("Selecione um associado.", true);
+  if (!selected.includes(":")) return toast("Selecione um benefício ou cupom disponível.", true);
+
+  const [kind, itemId] = selected.split(":");
+  const submit = event.submitter;
+  if (submit) submit.disabled = true;
   try {
     const result = await request("/api/admin/club/redemptions", {
       method: "POST",
       body: JSON.stringify({
-        member_id: Number($("redemptionMember").value),
+        member_id: memberId,
         kind,
         item_id: Number(itemId),
         amount_before: number($("redemptionAmount").value) || 0,
@@ -456,7 +508,12 @@ $("redemptionForm").onsubmit = async event => {
     closeEditor("redemptionEditor");
     await Promise.all([loadRedemptions(), loadDashboard()]);
     toast(`Utilização registrada. Desconto: ${money(result.discount_amount)}.`);
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    toast(error.message, true);
+    await loadRedemptionOptions(memberId);
+  } finally {
+    if (submit) submit.disabled = false;
+  }
 };
 
 async function loadDashboard() { state.dashboard = await request("/api/admin/club/dashboard"); renderDashboard(); }

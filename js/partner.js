@@ -129,11 +129,31 @@ function openRedeem(kind, id, title) {
 $("cancelRedeem").onclick = () => $("redeemDialog").close();
 $("redeemForm").onsubmit = async event => {
   event.preventDefault();
+  const submit = event.submitter;
+  if (submit) submit.disabled = true;
+  $("redeemResult").innerHTML = '<div class="message">Registrando utilização...</div>';
   try {
-    const result = await request("/api/partner/redeem", { method: "POST", body: JSON.stringify({ kind: $("redeemKind").value, item_id: Number($("redeemItemId").value), member_id: Number($("redeemMemberId").value), amount_before: parseMoney($("redeemAmount").value), notes: $("redeemNotes").value }) });
+    const result = await request("/api/partner/redeem", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: $("redeemKind").value,
+        item_id: Number($("redeemItemId").value),
+        member_id: Number($("redeemMemberId").value),
+        amount_before: parseMoney($("redeemAmount").value),
+        notes: $("redeemNotes").value
+      })
+    });
     $("redeemResult").innerHTML = `<div class="success-box">Registrado! Desconto: ${escapeHtml(money(result.discount_amount))} · Total final: ${escapeHtml(money(result.final_amount))}</div>`;
-    setTimeout(async () => { $("redeemDialog").close(); await Promise.all([reloadCurrentMember(), loadHistory()]); }, 1600);
-  } catch (error) { $("redeemResult").innerHTML = `<div class="message">${escapeHtml(error.message)}</div>`; }
+    setTimeout(async () => {
+      $("redeemDialog").close();
+      await Promise.all([reloadCurrentMember(), loadHistory()]);
+      if (submit) submit.disabled = false;
+    }, 1200);
+  } catch (error) {
+    $("redeemResult").innerHTML = `<div class="message">${escapeHtml(error.message)}</div>`;
+    if (submit) submit.disabled = false;
+    await reloadCurrentMember().catch(() => {});
+  }
 };
 
 async function reloadCurrentMember() {

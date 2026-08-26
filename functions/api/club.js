@@ -603,6 +603,10 @@ export async function handleAdminClub({ request, env, path, method }) {
     if (method === "DELETE") return deleteAdminRecord(env, "club_coupons", id, "Cupom");
   }
 
+  if (path === "/api/admin/club/redemption-options" && method === "GET") {
+    return adminRedemptionOptions(request, env);
+  }
+
   if (path === "/api/admin/club/redemptions") {
     if (method === "GET") return listRedemptions(request, env);
     if (method === "POST") return redeem(request, env, null, true);
@@ -670,21 +674,63 @@ async function partnerMember(request, env, partner) {
   });
 }
 
+async function adminRedemptionOptions(request, env) {
+  const memberId = Number(new URL(request.url).searchParams.get("member_id"));
+  if (!Number.isInteger(memberId) || memberId <= 0) {
+    return badRequest("Selecione um associado válido.");
+  }
+
+  const member = await env.DB.prepare(`
+    SELECT id, member_code, full_name, dog_name, valid_until, payment_status, status
+    FROM club_members WHERE id = ?
+  `).bind(memberId).first();
+
+  if (!member) return notFound("Associado não encontrado.");
+  if (!memberIsActive(member)) {
+    return badRequest("Associação inativa, vencida ou com pagamento pendente.");
+  }
+
+  const [benefits, coupons] = await Promise.all([
+    activeBenefits(env, member.id),
+    activeCoupons(env, member.id)
+  ]);
+
+  return json({
+    member: {
+      id: member.id,
+      member_code: member.member_code,
+      full_name: member.full_name
+    },
+    benefits,
+    coupons
+  });
+}
+
 async function redeem(request, env, partner = null, admin = false) {
   const data = await readBody(request);
-  const memberId = Number(data?.member_id);
-  const itemId = Number(data?.item_id);
-  const kind = data?.kind;
-  if (!Number.isInteger(memberId) || !Number.isInteger(itemId) || !["benefit", "coupon"].includes(kind)) {
+  if (!data) return badRequest("Não foi possível ler os dados da utilização.");
+
+  const memberId = Number(data.member_id);
+  const itemId = Number(data.item_id);
+  const kind = data.kind;
+  if (
+    !Number.isInteger(memberId) || memberId <= 0 ||
+    !Number.isInteger(itemId) || itemId <= 0 ||
+    !["benefit", "coupon"].includes(kind)
+  ) {
     return badRequest("Dados da utilização inválidos.");
   }
+
   const member = await env.DB.prepare("SELECT * FROM club_members WHERE id = ?").bind(memberId).first();
-  if (!member || !memberIsActive(member)) return badRequest("Associação inativa ou pagamento pendente.");
+  if (!member) return notFound("Associado não encontrado.");
+  if (!memberIsActive(member)) return badRequest("Associação inativa, vencida ou com pagamento pendente.");
+
   const amountBefore = Math.max(0, numberOrNull(data.amount_before) ?? 0);
   let discount = 0;
   let benefitId = null;
   let couponId = null;
   let redemptionPartnerId = partner?.id ?? null;
+  let result;
 
   if (kind === "benefit") {
     let benefitStatement = `
@@ -695,61 +741,112 @@ async function redeem(request, env, partner = null, admin = false) {
     `;
     const benefitValues = [itemId];
     if (!admin) {
+      if (!partner?.id) return forbidden();
       benefitStatement += " AND partner_id = ?";
       benefitValues.push(partner.id);
     }
+
     const benefit = await env.DB.prepare(benefitStatement).bind(...benefitValues).first();
-    if (!benefit) return badRequest(admin ? "Benefício indisponível." : "Benefício indisponível para este parceiro.");
-    if (benefit.usage_limit != null) {
-      const start = periodStart(benefit.period);
-      const usage = await env.DB.prepare(`
-        SELECT COUNT(*) AS total FROM club_redemptions
-        WHERE member_id = ? AND benefit_id = ? AND (? IS NULL OR redeemed_at >= ?)
-      `).bind(memberId, benefit.id, start, start).first();
-      if (Number(usage.total) >= Number(benefit.usage_limit)) return badRequest("Limite desse benefício já utilizado.");
+    if (!benefit) {
+      return badRequest(admin
+        ? "Esse benefício não está disponível ou está fora da validade."
+        : "Benefício indisponível para este parceiro."
+      );
     }
+
     benefitId = benefit.id;
     redemptionPartnerId = benefit.partner_id ?? redemptionPartnerId;
-    if (benefit.benefit_type === "percentage") discount = amountBefore * Number(benefit.value) / 100;
-    if (benefit.benefit_type === "fixed") discount = Number(benefit.value);
-    if (benefit.benefit_type === "credit") discount = amountBefore;
+
+    if (benefit.benefit_type === "percentage") {
+      discount = amountBefore * Number(benefit.value) / 100;
+    } else if (benefit.benefit_type === "fixed") {
+      discount = Number(benefit.value);
+    } else if (benefit.benefit_type === "credit") {
+      discount = amountBefore;
+    }
+
+    if (amountBefore > 0) discount = Math.min(amountBefore, Math.max(0, discount));
+    else discount = Math.max(0, discount);
+    discount = Math.round(discount * 100) / 100;
+
+    const start = periodStart(benefit.period);
+    const limit = benefit.usage_limit == null ? null : Number(benefit.usage_limit);
+
+    // O limite é verificado dentro do mesmo INSERT. Isso evita duas utilizações
+    // simultâneas ultrapassarem o limite mensal/anual do associado.
+    result = await env.DB.prepare(`
+      INSERT INTO club_redemptions (
+        member_id, partner_id, benefit_id, coupon_id, amount_before,
+        discount_amount, notes, redeemed_at
+      )
+      SELECT ?, ?, ?, NULL, ?, ?, ?, datetime('now')
+      WHERE ? IS NULL OR (
+        SELECT COUNT(*) FROM club_redemptions
+        WHERE member_id = ? AND benefit_id = ?
+          AND (? IS NULL OR redeemed_at >= ?)
+      ) < ?
+    `).bind(
+      memberId, redemptionPartnerId, benefitId, amountBefore || null,
+      discount, clean(data.notes, 500),
+      limit, memberId, benefitId, start, start, limit
+    ).run();
+
+    if (!result.meta.changes) {
+      return badRequest("O limite deste benefício já foi utilizado por este associado no período atual.");
+    }
   } else {
     let couponStatement = `
-      SELECT c.*,
-        (SELECT COUNT(*) FROM club_redemptions r WHERE r.coupon_id = c.id) AS total_used,
-        (SELECT COUNT(*) FROM club_redemptions r WHERE r.coupon_id = c.id AND r.member_id = ?) AS member_used
+      SELECT c.*
       FROM club_coupons c
       WHERE c.id = ? AND c.active = 1
         AND (c.member_id IS NULL OR c.member_id = ?)
         AND (c.starts_on IS NULL OR c.starts_on <= date('now'))
         AND (c.ends_on IS NULL OR c.ends_on >= date('now'))
     `;
-    const couponValues = [memberId, itemId, memberId];
+    const couponValues = [itemId, memberId];
     if (!admin) {
+      if (!partner?.id) return forbidden();
       couponStatement += " AND c.partner_id = ?";
       couponValues.push(partner.id);
     }
+
     const coupon = await env.DB.prepare(couponStatement).bind(...couponValues).first();
     if (!coupon) return badRequest("Cupom indisponível para este associado.");
-    if (coupon.total_limit != null && Number(coupon.total_used) >= Number(coupon.total_limit)) return badRequest("Cupom esgotado.");
-    if (Number(coupon.member_used) >= Number(coupon.per_member_limit)) return badRequest("Cupom já utilizado por este associado.");
+
     couponId = coupon.id;
     redemptionPartnerId = coupon.partner_id ?? redemptionPartnerId;
     discount = coupon.discount_type === "percentage"
       ? amountBefore * Number(coupon.discount_value) / 100
       : Number(coupon.discount_value);
+
+    if (amountBefore > 0) discount = Math.min(amountBefore, Math.max(0, discount));
+    else discount = Math.max(0, discount);
+    discount = Math.round(discount * 100) / 100;
+
+    const totalLimit = coupon.total_limit == null ? null : Number(coupon.total_limit);
+    const memberLimit = Number(coupon.per_member_limit || 1);
+
+    result = await env.DB.prepare(`
+      INSERT INTO club_redemptions (
+        member_id, partner_id, benefit_id, coupon_id, amount_before,
+        discount_amount, notes, redeemed_at
+      )
+      SELECT ?, ?, NULL, ?, ?, ?, ?, datetime('now')
+      WHERE
+        (? IS NULL OR (SELECT COUNT(*) FROM club_redemptions WHERE coupon_id = ?) < ?)
+        AND (SELECT COUNT(*) FROM club_redemptions WHERE coupon_id = ? AND member_id = ?) < ?
+    `).bind(
+      memberId, redemptionPartnerId, couponId, amountBefore || null,
+      discount, clean(data.notes, 500),
+      totalLimit, couponId, totalLimit,
+      couponId, memberId, memberLimit
+    ).run();
+
+    if (!result.meta.changes) {
+      return badRequest("Esse cupom já atingiu o limite permitido para este associado ou está esgotado.");
+    }
   }
 
-  discount = Math.round(Math.min(amountBefore || discount, Math.max(0, discount)) * 100) / 100;
-  const result = await env.DB.prepare(`
-    INSERT INTO club_redemptions (
-      member_id, partner_id, benefit_id, coupon_id, amount_before,
-      discount_amount, notes, redeemed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  `).bind(
-    memberId, redemptionPartnerId, benefitId, couponId, amountBefore || null,
-    discount, clean(data.notes, 500)
-  ).run();
   return json({
     id: result.meta.last_row_id,
     discount_amount: discount,
