@@ -406,7 +406,14 @@ async function registerForEvent(request, env) {
   const event = await currentEvent(env);
   if (event.status === "soldout") return error("As inscrições deste evento estão encerradas.", 409);
   const customer = await customerFromRequest(request, env);
-  if (customer && email !== customer.email) {
+  if (!customer) {
+    return error(
+      "Confirme seu e-mail para concluir a pré-inscrição.",
+      401,
+      "VERIFIED_ACCOUNT_REQUIRED"
+    );
+  }
+  if (email !== customer.email) {
     return error("Use na inscrição o mesmo e-mail confirmado da sua conta DOGFIT.", 409, "ACCOUNT_EMAIL_MISMATCH");
   }
   const duplicate = await env.DB.prepare(`
@@ -440,7 +447,7 @@ async function registerForEvent(request, env) {
           recreational_terms_accepted, muzzle_terms_accepted, privacy_accepted
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 1)
       `).bind(
-        code, customer?.id || null, event.title, event.date, event.time,
+        code, customer.id, event.title, event.date, event.time,
         event.location, event.price, clean(data.full_name, 180), data.birth_date,
         clean(data.phone, 30), email, clean(data.dog_name, 120),
         clean(data.dog_breed, 120), dogCount, sociability

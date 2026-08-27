@@ -162,9 +162,19 @@ if (mobilePanels.some(panel => panel.dataset.sitePanel === initialPanel)) {
 const registrationModal = document.getElementById("registrationModal");
 const registrationForm = document.getElementById("eventRegistrationForm");
 const registrationFormView = document.getElementById("registrationFormView");
+const registrationVerifyView = document.getElementById("registrationVerifyView");
+const registrationVerifyForm = document.getElementById("registrationVerifyForm");
+const registrationVerifyEmail = document.getElementById("registrationVerifyEmail");
+const registrationVerifyError = document.getElementById("registrationVerifyError");
+const registrationVerifySubmit = document.getElementById("registrationVerifySubmit");
+const registrationResendCode = document.getElementById("registrationResendCode");
+const registrationBackToForm = document.getElementById("registrationBackToForm");
 const registrationSuccess = document.getElementById("registrationSuccess");
 const registrationError = document.getElementById("registrationError");
 const registrationSubmit = document.getElementById("registrationSubmit");
+const registrationPasswordField = document.getElementById("registrationPasswordField");
+let registrationAuthenticated = false;
+let pendingRegistrationData = null;
 
 function setRegistrationOpen(open) {
   if (!registrationModal) return;
@@ -172,17 +182,157 @@ function setRegistrationOpen(open) {
   registrationModal.setAttribute("aria-hidden", String(!open));
   document.body.classList.toggle("modal-open", open);
   if (open) {
-    registrationModal.querySelector("input")?.focus();
+    registrationModal.querySelector("input:not([type='hidden'])")?.focus();
   } else {
     document.getElementById("openRegistration")?.focus();
   }
 }
 
-document.getElementById("openRegistration")?.addEventListener("click", () => {
-  registrationFormView.hidden = false;
-  registrationSuccess.hidden = true;
+function showRegistrationView(view) {
+  if (registrationFormView) registrationFormView.hidden = view !== "form";
+  if (registrationVerifyView) registrationVerifyView.hidden = view !== "verify";
+  if (registrationSuccess) registrationSuccess.hidden = view !== "success";
+}
+
+function setRegistrationAuthenticated(authenticated) {
+  registrationAuthenticated = Boolean(authenticated);
+  const password = registrationForm?.elements?.password;
+  const email = registrationForm?.elements?.email;
+  if (registrationPasswordField) registrationPasswordField.hidden = registrationAuthenticated;
+  if (password) {
+    password.required = !registrationAuthenticated;
+    if (registrationAuthenticated) password.value = "";
+  }
+  if (email) email.readOnly = registrationAuthenticated;
+}
+
+async function registrationRequest(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: "same-origin",
+    ...options,
+    headers: {
+      ...(options.body ? { "content-type": "application/json" } : {}),
+      ...(options.headers || {})
+    }
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const caught = new Error(result.error || "Não foi possível continuar.");
+    caught.code = result.code || "";
+    caught.status = response.status;
+    throw caught;
+  }
+  return result;
+}
+
+async function prefillRegistration() {
+  if (!registrationForm) return;
+  try {
+    const session = await registrationRequest("/api/client/session");
+    setRegistrationAuthenticated(session.authenticated);
+    if (!session.authenticated) return;
+    const { customer } = await registrationRequest("/api/client/dashboard");
+    ["full_name", "birth_date", "phone", "email", "dog_name", "dog_breed", "dog_count", "sociability"]
+      .forEach(name => {
+        const field = registrationForm.elements[name];
+        if (field && customer[name] != null) field.value = customer[name];
+      });
+  } catch {
+    setRegistrationAuthenticated(false);
+  }
+}
+
+function registrationPayload() {
+  const data = Object.fromEntries(new FormData(registrationForm).entries());
+  data.dog_count = Number(data.dog_count || 1);
+  data.recreational_terms_accepted = registrationForm.elements.recreational_terms_accepted.checked;
+  data.muzzle_terms_accepted = registrationForm.elements.muzzle_terms_accepted.checked;
+  data.privacy_accepted = registrationForm.elements.privacy_accepted.checked;
+  return data;
+}
+
+async function finishEventRegistration(data) {
+  const result = await registrationRequest("/api/events/register", {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+  if (!result.payment_url) throw new Error("O pagamento não foi disponibilizado. Tente novamente.");
+  document.getElementById("registrationCode").textContent = result.registration_code;
+  document.getElementById("registrationPaymentLink").href = result.payment_url;
+  showRegistrationView("success");
+  registrationSuccess?.scrollIntoView({ block: "start" });
+  pendingRegistrationData = null;
+  registrationForm.reset();
+  setTimeout(() => location.assign(result.payment_url), 1200);
+}
+
+async function ensureRegistrationAccount(data) {
+  if (registrationAuthenticated) return true;
+  const password = String(data.password || "");
+  if (password.length < 8) throw new Error("Crie uma senha com pelo menos 8 caracteres para sua conta DOGFIT.");
+
+  const accountData = {
+    full_name: data.full_name,
+    birth_date: data.birth_date,
+    phone: data.phone,
+    email: data.email,
+    dog_name: data.dog_name,
+    dog_breed: data.dog_breed,
+    dog_count: data.dog_count,
+    sociability: data.sociability,
+    password,
+    privacy_accepted: data.privacy_accepted
+  };
+
+  try {
+    const result = await registrationRequest("/api/client/register", {
+      method: "POST",
+      body: JSON.stringify(accountData)
+    });
+    if (result.verification_required) {
+      pendingRegistrationData = { ...data };
+      delete pendingRegistrationData.password;
+      if (registrationVerifyEmail) registrationVerifyEmail.textContent = data.email;
+      if (registrationVerifyError) registrationVerifyError.textContent = result.message || "";
+      showRegistrationView("verify");
+      registrationVerifyForm?.elements?.code?.focus();
+      return false;
+    }
+  } catch (caught) {
+    if (caught.code !== "EMAIL_EXISTS") throw caught;
+    // O e-mail já pertence a uma conta confirmada. A própria senha informada
+    // no formulário funciona como login, sem tirar o cliente da pré-inscrição.
+    try {
+      await registrationRequest("/api/client/login", {
+        method: "POST",
+        body: JSON.stringify({ email: data.email, password })
+      });
+      setRegistrationAuthenticated(true);
+      return true;
+    } catch (loginError) {
+      if (loginError.code === "EMAIL_NOT_VERIFIED") {
+        pendingRegistrationData = { ...data };
+        delete pendingRegistrationData.password;
+        if (registrationVerifyEmail) registrationVerifyEmail.textContent = data.email;
+        if (registrationVerifyError) registrationVerifyError.textContent = loginError.message;
+        showRegistrationView("verify");
+        return false;
+      }
+      if (loginError.status === 401) {
+        throw new Error("Este e-mail já possui uma conta DOGFIT. Informe a senha dessa conta para continuar a pré-inscrição.");
+      }
+      throw loginError;
+    }
+  }
+  return false;
+}
+
+document.getElementById("openRegistration")?.addEventListener("click", async () => {
+  showRegistrationView("form");
   if (registrationError) registrationError.textContent = "";
+  if (registrationVerifyError) registrationVerifyError.textContent = "";
   setRegistrationOpen(true);
+  await prefillRegistration();
 });
 
 document.querySelectorAll("[data-close-registration]").forEach(button => {
@@ -195,56 +345,74 @@ document.addEventListener("keydown", event => {
   }
 });
 
-async function prefillRegistration() {
-  if (!registrationForm) return;
-  try {
-    const response = await fetch("/api/client/dashboard", { credentials: "same-origin" });
-    if (!response.ok) return;
-    const { customer } = await response.json();
-    ["full_name", "birth_date", "phone", "email", "dog_name", "dog_breed", "dog_count", "sociability"]
-      .forEach(name => {
-        const field = registrationForm.elements[name];
-        if (field && customer[name] != null) field.value = customer[name];
-      });
-  } catch {
-    // A pré-inscrição continua disponível sem login.
-  }
-}
-
 registrationForm?.addEventListener("submit", async event => {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(registrationForm).entries());
-  data.dog_count = Number(data.dog_count || 1);
-  data.recreational_terms_accepted = registrationForm.elements.recreational_terms_accepted.checked;
-  data.muzzle_terms_accepted = registrationForm.elements.muzzle_terms_accepted.checked;
-  data.privacy_accepted = registrationForm.elements.privacy_accepted.checked;
+  const data = registrationPayload();
   registrationError.textContent = "";
   registrationSubmit.disabled = true;
-  registrationSubmit.textContent = "ENVIANDO...";
+  registrationSubmit.textContent = registrationAuthenticated ? "ENVIANDO..." : "CRIANDO ACESSO SEGURO...";
 
   try {
-    const response = await fetch("/api/events/register", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify(data)
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.error || "Não foi possível realizar a pré-inscrição.");
-    if (!result.payment_url) throw new Error("O pagamento não foi disponibilizado. Tente novamente.");
-    document.getElementById("registrationCode").textContent = result.registration_code;
-    document.getElementById("registrationPaymentLink").href = result.payment_url;
-    registrationFormView.hidden = true;
-    registrationSuccess.hidden = false;
-    registrationSuccess.scrollIntoView({ block: "start" });
-    registrationForm.reset();
-    setTimeout(() => location.assign(result.payment_url), 1200);
+    const ready = await ensureRegistrationAccount(data);
+    if (!ready) return;
+    const registrationData = { ...data };
+    delete registrationData.password;
+    await finishEventRegistration(registrationData);
   } catch (caught) {
     registrationError.textContent = caught.message;
   } finally {
     registrationSubmit.disabled = false;
     registrationSubmit.innerHTML = 'ENVIAR PRÉ-INSCRIÇÃO <span>→</span>';
   }
+});
+
+registrationVerifyForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!pendingRegistrationData) {
+    showRegistrationView("form");
+    return;
+  }
+  const code = String(new FormData(registrationVerifyForm).get("code") || "").replace(/\D/g, "").slice(0, 6);
+  registrationVerifyError.textContent = "";
+  registrationVerifySubmit.disabled = true;
+  registrationVerifySubmit.textContent = "CONFIRMANDO...";
+  try {
+    await registrationRequest("/api/client/verify-email", {
+      method: "POST",
+      body: JSON.stringify({ email: pendingRegistrationData.email, code })
+    });
+    setRegistrationAuthenticated(true);
+    await finishEventRegistration(pendingRegistrationData);
+  } catch (caught) {
+    registrationVerifyError.textContent = caught.message;
+  } finally {
+    registrationVerifySubmit.disabled = false;
+    registrationVerifySubmit.innerHTML = 'CONFIRMAR E CONCLUIR <span>→</span>';
+  }
+});
+
+registrationResendCode?.addEventListener("click", async () => {
+  if (!pendingRegistrationData?.email) return;
+  registrationVerifyError.textContent = "";
+  registrationResendCode.disabled = true;
+  registrationResendCode.textContent = "REENVIANDO...";
+  try {
+    const result = await registrationRequest("/api/client/resend-verification", {
+      method: "POST",
+      body: JSON.stringify({ email: pendingRegistrationData.email })
+    });
+    registrationVerifyError.textContent = result.message || "Novo código enviado.";
+  } catch (caught) {
+    registrationVerifyError.textContent = caught.message;
+  } finally {
+    registrationResendCode.disabled = false;
+    registrationResendCode.textContent = "REENVIAR CÓDIGO";
+  }
+});
+
+registrationBackToForm?.addEventListener("click", () => {
+  showRegistrationView("form");
+  registrationError.textContent = "Confira seus dados e envie novamente quando estiver pronto.";
 });
 
 prefillRegistration();

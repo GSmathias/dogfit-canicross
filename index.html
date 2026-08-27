@@ -510,6 +510,11 @@
             <span>E-mail</span>
             <input name="email" type="email" autocomplete="email" maxlength="180" required>
           </label>
+          <label class="registration-field registration-wide" id="registrationPasswordField">
+            <span>Senha da sua conta DOGFIT</span>
+            <input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="120" required placeholder="Mínimo 8 caracteres">
+            <small class="registration-hint">Primeira vez? Crie sua senha aqui. Se já possui conta, informe sua senha atual. Você não precisará preencher seus dados novamente.</small>
+          </label>
           <label class="registration-field">
             <span>Nome do cachorro</span>
             <input name="dog_name" maxlength="120" required>
@@ -550,6 +555,24 @@
             ENVIAR PRÉ-INSCRIÇÃO <span>→</span>
           </button>
         </form>
+      </div>
+
+      <div class="registration-success registration-verification" id="registrationVerifyView" hidden>
+        <p class="eyebrow">SEGURANÇA DOGFIT</p>
+        <h2>CONFIRME<br><span>SEU E-MAIL.</span></h2>
+        <p>Enviamos um código de 6 dígitos para <strong id="registrationVerifyEmail">—</strong>. Digite-o abaixo para confirmar seu e-mail e concluir a pré-inscrição sem sair desta tela.</p>
+        <form id="registrationVerifyForm" class="registration-verification-form">
+          <label class="registration-field">
+            <span>Código de segurança</span>
+            <input name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required>
+          </label>
+          <p class="registration-error" id="registrationVerifyError" role="alert"></p>
+          <button class="btn btn-primary" type="submit" id="registrationVerifySubmit">
+            CONFIRMAR E CONCLUIR <span>→</span>
+          </button>
+        </form>
+        <button class="registration-done" type="button" id="registrationResendCode">REENVIAR CÓDIGO</button>
+        <button class="registration-done" type="button" id="registrationBackToForm">← CORRIGIR MEUS DADOS</button>
       </div>
 
       <div class="registration-success" id="registrationSuccess" hidden>

@@ -2035,6 +2035,18 @@ body.modal-open {
   background: #151515;
 }
 
+.registration-field input[readonly] {
+  color: #aaa;
+  background: #101010;
+  cursor: not-allowed;
+}
+
+.registration-hint {
+  color: #858580;
+  font-size: .68rem;
+  line-height: 1.45;
+}
+
 .registration-wide {
   grid-column: 1 / -1;
 }
@@ -2094,6 +2106,28 @@ body.modal-open {
 .registration-success > p:not(.eyebrow):not(.registration-code) {
   color: var(--muted);
   margin: 20px auto;
+}
+
+.registration-verification > p strong {
+  color: white;
+}
+
+.registration-verification-form {
+  width: min(100%, 440px);
+  margin: 24px auto 8px;
+  text-align: left;
+}
+
+.registration-verification-form input[name="code"] {
+  text-align: center;
+  font-size: 1.65rem;
+  font-weight: 900;
+  letter-spacing: .28em;
+}
+
+.registration-verification-form .btn {
+  width: 100%;
+  margin-top: 4px;
 }
 
 .pix-copy {
