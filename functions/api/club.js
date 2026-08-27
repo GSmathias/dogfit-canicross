@@ -1,4 +1,15 @@
 import { json, badRequest, notFound } from "../_lib/http.js";
+import {
+  cleanReferralCode,
+  createReferral,
+  normalizeReferralEmail,
+  normalizeReferralPhone,
+  numberToCents,
+  referralSettingByCode,
+  referralSettingById,
+  syncReferralPaymentBySource,
+  validateReferralCode
+} from "../_lib/referrals.js";
 
 const encoder = new TextEncoder();
 
@@ -220,12 +231,64 @@ async function listMembers(request, env) {
   const query = clean(new URL(request.url).searchParams.get("q"), 80);
   const like = `%${query}%`;
   const { results } = await env.DB.prepare(`
-    SELECT * FROM club_members
-    WHERE ? = '' OR full_name LIKE ? OR member_code LIKE ? OR dog_name LIKE ?
-    ORDER BY status = 'active' DESC, full_name COLLATE NOCASE
+    SELECT m.*,
+      (SELECT r.code_snapshot FROM partner_referrals r
+        WHERE r.source_type = 'club' AND r.club_member_id = m.id
+        ORDER BY r.id DESC LIMIT 1) AS referral_code,
+      (SELECT r.partner_name_snapshot FROM partner_referrals r
+        WHERE r.source_type = 'club' AND r.club_member_id = m.id
+        ORDER BY r.id DESC LIMIT 1) AS referral_partner_name,
+      (SELECT r.commission_status FROM partner_referrals r
+        WHERE r.source_type = 'club' AND r.club_member_id = m.id
+        ORDER BY r.id DESC LIMIT 1) AS referral_commission_status
+    FROM club_members m
+    WHERE ? = '' OR m.full_name LIKE ? OR m.member_code LIKE ? OR m.dog_name LIKE ?
+    ORDER BY m.status = 'active' DESC, m.full_name COLLATE NOCASE
     LIMIT 300
   `).bind(query, like, like, like).all();
   return json(results.map(item => ({ ...item, membership_active: memberIsActive(item) })));
+}
+
+async function createClubReferralForMember(env, member, referralCode) {
+  const code = cleanReferralCode(referralCode);
+  if (!code) return { referral: null, warning: "" };
+  const originalAmountCents = numberToCents(member.monthly_fee);
+  const validation = await validateReferralCode(env, code, {
+    customerId: member.customer_id,
+    email: member.email,
+    phone: member.whatsapp,
+    sourceType: "club",
+    originalAmountCents,
+    otherDiscountCents: 0
+  });
+  if (!validation.valid) return { referral: null, warning: validation.message };
+  try {
+    const referral = await createReferral(env, {
+      setting: validation.setting,
+      customerId: member.customer_id,
+      email: member.email,
+      phone: member.whatsapp,
+      sourceType: "club",
+      sourceReference: member.member_code,
+      clubMemberId: member.id,
+      originalAmountCents,
+      discountAmountCents: validation.discount_amount_cents
+    });
+    if (member.payment_status === "paid") {
+      await syncReferralPaymentBySource(env, {
+        sourceType: "club",
+        sourceReference: referral.source_reference,
+        paymentStatus: "approved",
+        paymentProvider: "manual"
+      });
+    }
+    return { referral, warning: "" };
+  } catch (error) {
+    if (String(error).includes("REFERRAL_CUSTOMER_LIMIT")) {
+      return { referral: null, warning: "Este cliente já atingiu o limite de uso deste cupom de indicação." };
+    }
+    throw error;
+  }
 }
 
 async function createMember(request, env) {
@@ -233,33 +296,39 @@ async function createMember(request, env) {
   if (!data?.full_name?.trim()) return badRequest("Nome do associado é obrigatório.");
   const code = clean(data.member_code, 30).toUpperCase() || memberCode();
   const token = crypto.randomUUID();
+  const memberEmail = email(data.email);
+  const monthlyFee = numberOrNull(data.monthly_fee) ?? 79.9;
+  const customer = memberEmail
+    ? await env.DB.prepare("SELECT id FROM customer_accounts WHERE email = ? AND email_verified_at IS NOT NULL")
+        .bind(memberEmail).first()
+    : null;
   try {
     const result = await env.DB.prepare(`
       INSERT INTO club_members (
         member_code, public_token, full_name, whatsapp, email, dog_name,
         plan_name, monthly_fee, joined_on, valid_until, payment_status,
-        status, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        status, notes, customer_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).bind(
       code,
       token,
       clean(data.full_name, 180),
       clean(data.whatsapp, 30),
-      email(data.email),
+      memberEmail,
       clean(data.dog_name, 120),
       clean(data.plan_name, 120) || "Clube DOGFIT CANICROSS",
-      numberOrNull(data.monthly_fee) ?? 79.9,
+      monthlyFee,
       dateOrNull(data.joined_on) || new Date().toISOString().slice(0, 10),
       dateOrNull(data.valid_until),
       ["paid", "pending", "overdue"].includes(data.payment_status) ? data.payment_status : "paid",
       data.status === "inactive" ? "inactive" : "active",
-      clean(data.notes, 1000)
+      clean(data.notes, 1000),
+      customer?.id || null
     ).run();
-    return json(
-      await env.DB.prepare("SELECT * FROM club_members WHERE id = ?")
-        .bind(result.meta.last_row_id).first(),
-      201
-    );
+    const member = await env.DB.prepare("SELECT * FROM club_members WHERE id = ?")
+      .bind(result.meta.last_row_id).first();
+    const referralResult = await createClubReferralForMember(env, member, data.referral_code);
+    return json({ ...member, referral_code: referralResult.referral?.code_snapshot || "", referral_warning: referralResult.warning }, 201);
   } catch (error) {
     if (String(error).includes("UNIQUE")) return badRequest("Código de associado já utilizado.");
     throw error;
@@ -292,12 +361,37 @@ async function updateMember(request, env, id) {
       id
     ).run();
     if (!result.meta.changes) return notFound("Associado não encontrado.");
-    return json(await env.DB.prepare("SELECT * FROM club_members WHERE id = ?").bind(id).first());
+
+    const member = await env.DB.prepare("SELECT * FROM club_members WHERE id = ?").bind(id).first();
+    let referral = await env.DB.prepare(`
+      SELECT * FROM partner_referrals WHERE source_type = 'club' AND club_member_id = ? ORDER BY id DESC LIMIT 1
+    `).bind(id).first();
+    let warning = "";
+    const requestedCode = cleanReferralCode(data.referral_code);
+
+    if (!referral && requestedCode) {
+      const referralResult = await createClubReferralForMember(env, member, requestedCode);
+      referral = referralResult.referral;
+      warning = referralResult.warning;
+    } else if (referral) {
+      if (requestedCode && requestedCode !== cleanReferralCode(referral.code_snapshot)) {
+        warning = "O cupom de indicação já registrado para este associado foi preservado para manter o histórico financeiro.";
+      }
+      await syncReferralPaymentBySource(env, {
+        sourceType: "club",
+        sourceReference: referral.source_reference,
+        paymentStatus: member.payment_status === "paid" ? "approved" : "pending",
+        paymentProvider: member.payment_status === "paid" ? (referral.payment_provider || "manual") : referral.payment_provider
+      });
+    }
+
+    return json({ ...member, referral_code: referral?.code_snapshot || "", referral_warning: warning });
   } catch (error) {
     if (String(error).includes("UNIQUE")) return badRequest("Código de associado já utilizado.");
     throw error;
   }
 }
+
 
 async function listPartners(env) {
   const { results } = await env.DB.prepare(`
@@ -498,6 +592,293 @@ async function listRedemptions(request, env, partnerId = undefined) {
   );
 }
 
+function referralConfigView(item) {
+  return {
+    ...item,
+    customer_discount_value: item.customer_discount_type === "fixed"
+      ? Number(item.customer_discount_cents || 0) / 100
+      : Number(item.customer_discount_bps || 0) / 100,
+    event_commission: Number(item.event_commission_cents || 0) / 100,
+    club_commission: Number(item.club_commission_cents || 0) / 100,
+    product_commission_percent: Number(item.product_commission_bps || 0) / 100,
+    active_effective: Boolean(Number(item.active) && Number(item.partner_active ?? 1))
+  };
+}
+
+async function listReferralConfigs(env) {
+  const { results } = await env.DB.prepare(`
+    SELECT s.*, p.name AS partner_name, p.email AS partner_email, p.active AS partner_active,
+      COUNT(r.id) AS referral_count,
+      SUM(CASE WHEN r.payment_status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
+      COALESCE(SUM(CASE WHEN r.payment_status = 'approved' THEN r.final_amount_cents ELSE 0 END), 0) AS total_sold_cents,
+      COALESCE(SUM(CASE WHEN r.commission_status = 'released' THEN r.commission_amount_cents ELSE 0 END), 0) AS pending_commission_cents,
+      COALESCE(SUM(CASE WHEN r.commission_status = 'paid' THEN r.commission_amount_cents ELSE 0 END), 0) AS paid_commission_cents
+    FROM partner_referral_settings s
+    JOIN club_partners p ON p.id = s.partner_id
+    LEFT JOIN partner_referrals r ON r.referral_setting_id = s.id
+    GROUP BY s.id
+    ORDER BY (s.active = 1 AND p.active = 1) DESC, p.name COLLATE NOCASE
+  `).all();
+  return json(results.map(referralConfigView));
+}
+
+async function saveReferralConfig(request, env, id = null) {
+  const data = await readBody(request);
+  const partnerId = Number(data?.partner_id);
+  if (!Number.isInteger(partnerId) || partnerId <= 0) return badRequest("Selecione um parceiro válido.");
+  const partner = await env.DB.prepare("SELECT id, name, active FROM club_partners WHERE id = ?").bind(partnerId).first();
+  if (!partner) return notFound("Parceiro não encontrado.");
+  const code = cleanReferralCode(data?.code);
+  if (!code) return badRequest("Informe um código de indicação válido.");
+
+  const discountType = data?.customer_discount_type === "fixed" ? "fixed" : "percentage";
+  const discountValue = Math.max(0, Number(data?.customer_discount_value || 0));
+  if (!Number.isFinite(discountValue) || (discountType === "percentage" && discountValue > 100)) {
+    return badRequest("Desconto inválido.");
+  }
+  const productCommission = Math.max(0, Number(data?.product_commission_percent || 0));
+  if (!Number.isFinite(productCommission) || productCommission > 100) return badRequest("Comissão de produtos inválida.");
+  const perCustomerLimit = Math.max(1, Math.trunc(Number(data?.per_customer_limit) || 1));
+  const values = [
+    partnerId,
+    code,
+    data?.active === false ? 0 : 1,
+    discountType,
+    discountType === "percentage" ? Math.round(discountValue * 100) : 0,
+    discountType === "fixed" ? numberToCents(discountValue) : 0,
+    numberToCents(Math.max(0, Number(data?.event_commission || 0))),
+    numberToCents(Math.max(0, Number(data?.club_commission || 0))),
+    Math.round(productCommission * 100),
+    perCustomerLimit,
+    bool(data?.allow_stacking) ? 1 : 0,
+    dateOrNull(data?.valid_until)
+  ];
+
+  try {
+    if (id) {
+      const current = await referralSettingById(env, id);
+      if (!current) return notFound("Configuração de indicação não encontrada.");
+      if (Number(current.partner_id) !== partnerId) {
+        const history = await env.DB.prepare("SELECT 1 AS found FROM partner_referrals WHERE referral_setting_id = ? LIMIT 1")
+          .bind(id).first();
+        if (history) return badRequest("Este cupom já possui histórico. O pet shop não pode ser trocado; crie uma nova configuração para preservar a auditoria.");
+      }
+    }
+    if (!id) {
+      const result = await env.DB.prepare(`
+        INSERT INTO partner_referral_settings (
+          partner_id, code, active, customer_discount_type, customer_discount_bps,
+          customer_discount_cents, event_commission_cents, club_commission_cents,
+          product_commission_bps, per_customer_limit, allow_stacking, valid_until,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).bind(...values).run();
+      const saved = await referralSettingById(env, result.meta.last_row_id);
+      return json(referralConfigView(saved), 201);
+    }
+    const result = await env.DB.prepare(`
+      UPDATE partner_referral_settings SET
+        partner_id = ?, code = ?, active = ?, customer_discount_type = ?,
+        customer_discount_bps = ?, customer_discount_cents = ?,
+        event_commission_cents = ?, club_commission_cents = ?, product_commission_bps = ?,
+        per_customer_limit = ?, allow_stacking = ?, valid_until = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(...values, id).run();
+    if (!result.meta.changes) return notFound("Configuração de indicação não encontrada.");
+    const saved = await referralSettingById(env, id);
+    return json(referralConfigView(saved));
+  } catch (error) {
+    if (String(error).includes("UNIQUE")) {
+      return badRequest("Esse código já está em uso ou este parceiro já possui um código de indicação.");
+    }
+    throw error;
+  }
+}
+
+async function listReferralRecords(request, env, forcedPartnerId = null) {
+  const url = new URL(request.url);
+  const partnerId = forcedPartnerId || Number(url.searchParams.get("partner_id") || 0);
+  const paymentStatus = clean(url.searchParams.get("payment_status"), 20);
+  const commissionStatus = clean(url.searchParams.get("commission_status"), 20);
+  const sourceType = clean(url.searchParams.get("source_type"), 20);
+  const dateFrom = dateOrNull(url.searchParams.get("from")) || "";
+  const dateTo = dateOrNull(url.searchParams.get("to")) || "";
+  const query = clean(url.searchParams.get("q"), 100);
+  const like = `%${query}%`;
+  const { results } = await env.DB.prepare(`
+    SELECT r.*, p.name AS partner_name, s.code AS current_code,
+      ca.full_name AS customer_name,
+      er.registration_code, er.event_title,
+      cm.member_code, cm.full_name AS member_name,
+      pr.name AS product_name
+    FROM partner_referrals r
+    JOIN club_partners p ON p.id = r.partner_id
+    JOIN partner_referral_settings s ON s.id = r.referral_setting_id
+    LEFT JOIN customer_accounts ca ON ca.id = r.customer_id
+    LEFT JOIN event_registrations er ON er.id = r.event_registration_id
+    LEFT JOIN club_members cm ON cm.id = r.club_member_id
+    LEFT JOIN products pr ON pr.id = r.product_id
+    WHERE (? = 0 OR r.partner_id = ?)
+      AND (? = '' OR r.payment_status = ?)
+      AND (? = '' OR r.commission_status = ?)
+      AND (? = '' OR r.source_type = ?)
+      AND (? = '' OR date(r.referred_at) >= ?)
+      AND (? = '' OR date(r.referred_at) <= ?)
+      AND (? = '' OR r.code_snapshot LIKE ? OR r.partner_name_snapshot LIKE ? OR
+        r.source_reference LIKE ? OR r.customer_email LIKE ? OR r.customer_phone LIKE ?)
+    ORDER BY r.referred_at DESC, r.id DESC
+    LIMIT 500
+  `).bind(
+    partnerId || 0, partnerId || 0,
+    paymentStatus, paymentStatus,
+    commissionStatus, commissionStatus,
+    sourceType, sourceType,
+    dateFrom, dateFrom,
+    dateTo, dateTo,
+    query, like, like, like, like, like
+  ).all();
+  return results;
+}
+
+async function referralDetail(env, id) {
+  return env.DB.prepare(`
+    SELECT r.*, p.name AS partner_name, s.code AS current_code,
+      ca.full_name AS customer_name, er.event_title, er.event_date,
+      cm.full_name AS member_name, pr.name AS product_name
+    FROM partner_referrals r
+    JOIN club_partners p ON p.id = r.partner_id
+    JOIN partner_referral_settings s ON s.id = r.referral_setting_id
+    LEFT JOIN customer_accounts ca ON ca.id = r.customer_id
+    LEFT JOIN event_registrations er ON er.id = r.event_registration_id
+    LEFT JOIN club_members cm ON cm.id = r.club_member_id
+    LEFT JOIN products pr ON pr.id = r.product_id
+    WHERE r.id = ?
+  `).bind(id).first();
+}
+
+async function createManualReferral(request, env) {
+  const data = await readBody(request);
+  const setting = await referralSettingById(env, Number(data?.referral_setting_id));
+  if (!setting) return notFound("Cupom de indicação não encontrado.");
+  const sourceType = ["club", "product"].includes(data?.source_type) ? data.source_type : null;
+  if (!sourceType) return badRequest("Indicações manuais são permitidas para Clube ou produto.");
+  const originalAmountCents = numberToCents(Math.max(0, Number(data?.original_amount || 0)));
+  if (!originalAmountCents) return badRequest("Informe o valor original da venda.");
+  const customerEmail = normalizeReferralEmail(data?.customer_email);
+  const customerPhone = normalizeReferralPhone(data?.customer_phone);
+  if (!customerEmail && !customerPhone) return badRequest("Informe ao menos e-mail ou telefone do cliente.");
+  const customer = customerEmail
+    ? await env.DB.prepare("SELECT id FROM customer_accounts WHERE email = ?").bind(customerEmail).first()
+    : null;
+  const otherDiscountCents = numberToCents(Math.max(0, Number(data?.other_discount || 0)));
+  const validation = await validateReferralCode(env, setting.code, {
+    customerId: customer?.id,
+    email: customerEmail,
+    phone: customerPhone,
+    sourceType,
+    originalAmountCents,
+    otherDiscountCents
+  });
+  if (!validation.valid) return badRequest(validation.message || "Cupom de indicação indisponível.");
+  const sourceReference = clean(data?.source_reference, 120) ||
+    `MAN-${sourceType.toUpperCase()}-${new Date().getUTCFullYear()}-${randomHex(4).toUpperCase()}`;
+  try {
+    const referral = await createReferral(env, {
+      setting: validation.setting,
+      customerId: customer?.id,
+      email: customerEmail,
+      phone: customerPhone,
+      sourceType,
+      sourceReference,
+      productId: integerOrNull(data?.product_id),
+      originalAmountCents,
+      otherDiscountAmountCents: validation.other_discount_amount_cents,
+      discountAmountCents: validation.discount_amount_cents
+    });
+    const paymentStatus = ["approved", "cancelled", "refunded"].includes(data?.payment_status)
+      ? data.payment_status : "pending";
+    await syncReferralPaymentBySource(env, {
+      sourceType,
+      sourceReference,
+      paymentStatus,
+      paymentProvider: paymentStatus === "approved" ? "manual" : ""
+    });
+    return json(await referralDetail(env, referral.id), 201);
+  } catch (error) {
+    if (String(error).includes("REFERRAL_CUSTOMER_LIMIT")) return badRequest("Este cliente já atingiu o limite deste cupom de indicação.");
+    if (String(error).includes("UNIQUE")) return badRequest("Já existe uma indicação com essa referência.");
+    throw error;
+  }
+}
+
+async function updateReferralPayment(request, env, id) {
+  const data = await readBody(request);
+  const current = await env.DB.prepare("SELECT * FROM partner_referrals WHERE id = ?").bind(id).first();
+  if (!current) return notFound("Indicação não encontrada.");
+  const status = ["pending", "approved", "cancelled", "refunded"].includes(data?.payment_status)
+    ? data.payment_status : null;
+  if (!status) return badRequest("Status de pagamento inválido.");
+  await syncReferralPaymentBySource(env, {
+    sourceType: current.source_type,
+    sourceReference: current.source_reference,
+    paymentStatus: status,
+    paymentProvider: status === "approved" ? (current.payment_provider || "manual") : current.payment_provider,
+    paidAmountCents: status === "approved" && data?.paid_amount != null
+      ? numberToCents(Math.max(0, Number(data.paid_amount)))
+      : undefined
+  });
+  return json(await referralDetail(env, id));
+}
+
+async function markReferralCommissionsPaid(request, env) {
+  const data = await readBody(request);
+  const ids = [...new Set((Array.isArray(data?.ids) ? data.ids : [])
+    .map(Number).filter(id => Number.isInteger(id) && id > 0))].slice(0, 100);
+  if (!ids.length) return badRequest("Selecione ao menos uma comissão liberada.");
+  const results = await env.DB.batch(ids.map(id => env.DB.prepare(`
+    UPDATE partner_referrals
+    SET commission_status = 'paid', commission_paid_at = datetime('now'), updated_at = datetime('now')
+    WHERE id = ? AND payment_status = 'approved' AND commission_status = 'released'
+  `).bind(id)));
+  const changed = results.reduce((total, item) => total + Number(item?.meta?.changes || 0), 0);
+  return json({ ok: true, paid: changed });
+}
+
+async function partnerReferralSummary(request, env, partner) {
+  const setting = await env.DB.prepare(`
+    SELECT s.*, p.name AS partner_name, p.active AS partner_active
+    FROM partner_referral_settings s JOIN club_partners p ON p.id = s.partner_id
+    WHERE s.partner_id = ? LIMIT 1
+  `).bind(partner.id).first();
+  if (!setting) return json({ configured: false, partner: { id: partner.id, name: partner.name } });
+  const rows = await env.DB.batch([
+    env.DB.prepare("SELECT COUNT(*) AS total FROM partner_referrals WHERE partner_id = ?").bind(partner.id),
+    env.DB.prepare("SELECT COUNT(*) AS total FROM partner_referrals WHERE partner_id = ? AND payment_status = 'approved'").bind(partner.id),
+    env.DB.prepare("SELECT COALESCE(SUM(final_amount_cents), 0) AS total FROM partner_referrals WHERE partner_id = ? AND payment_status = 'approved'").bind(partner.id),
+    env.DB.prepare("SELECT COALESCE(SUM(commission_amount_cents), 0) AS total FROM partner_referrals WHERE partner_id = ? AND commission_status = 'released'").bind(partner.id),
+    env.DB.prepare("SELECT COALESCE(SUM(commission_amount_cents), 0) AS total FROM partner_referrals WHERE partner_id = ? AND commission_status = 'paid'").bind(partner.id),
+    env.DB.prepare(`
+      SELECT source_type, source_reference, final_amount_cents, commission_amount_cents,
+        payment_status, commission_status, referred_at, payment_confirmed_at, commission_paid_at
+      FROM partner_referrals WHERE partner_id = ? ORDER BY referred_at DESC LIMIT 30
+    `).bind(partner.id)
+  ]);
+  const origin = new URL(request.url).origin;
+  return json({
+    configured: true,
+    setting: referralConfigView(setting),
+    link: `${origin}/pre-inscricao?ref=${encodeURIComponent(setting.code)}`,
+    stats: {
+      referrals: Number(rows[0].results[0]?.total || 0),
+      approved: Number(rows[1].results[0]?.total || 0),
+      total_sold_cents: Number(rows[2].results[0]?.total || 0),
+      pending_commission_cents: Number(rows[3].results[0]?.total || 0),
+      paid_commission_cents: Number(rows[4].results[0]?.total || 0)
+    },
+    recent: rows[5].results
+  });
+}
+
 async function deleteAdminRecord(env, table, id, label) {
   const allowedTables = new Set([
     "club_members",
@@ -509,20 +890,37 @@ async function deleteAdminRecord(env, table, id, label) {
   if (!allowedTables.has(table)) return badRequest("Tipo de registro inválido.");
 
   if (table === "club_partners") {
+    const partner = await env.DB.prepare("SELECT id, active FROM club_partners WHERE id = ?").bind(id).first();
+    if (!partner) return notFound(`${label} não encontrado.`);
+
+    // Parceiros com qualquer histórico operacional/financeiro não são apagados.
+    // Isso preserva auditoria de benefícios do Clube e, principalmente, indicações/comissões.
+    const history = await env.DB.prepare(`
+      SELECT
+        EXISTS(SELECT 1 FROM club_redemptions WHERE partner_id = ? LIMIT 1) AS has_redemptions,
+        EXISTS(SELECT 1 FROM partner_referrals WHERE partner_id = ? LIMIT 1) AS has_referrals
+    `).bind(id, id).first();
+
+    if (Number(history?.has_redemptions || 0) || Number(history?.has_referrals || 0)) {
+      await env.DB.batch([
+        env.DB.prepare("UPDATE club_partners SET active = 0 WHERE id = ?").bind(id),
+        env.DB.prepare("UPDATE partner_referral_settings SET active = 0, updated_at = datetime('now') WHERE partner_id = ?").bind(id),
+        env.DB.prepare("UPDATE club_benefits SET active = 0 WHERE partner_id = ?").bind(id),
+        env.DB.prepare("UPDATE club_coupons SET active = 0 WHERE partner_id = ?").bind(id),
+        env.DB.prepare("DELETE FROM club_partner_sessions WHERE partner_id = ?").bind(id)
+      ]);
+      return json({ ok: true, deactivated: true, preserved_history: true });
+    }
+
     const results = await env.DB.batch([
-      env.DB.prepare(`
-        DELETE FROM club_redemptions
-        WHERE partner_id = ?
-          OR benefit_id IN (SELECT id FROM club_benefits WHERE partner_id = ?)
-          OR coupon_id IN (SELECT id FROM club_coupons WHERE partner_id = ?)
-      `).bind(id, id, id),
       env.DB.prepare("DELETE FROM club_partner_sessions WHERE partner_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM partner_referral_settings WHERE partner_id = ?").bind(id),
       env.DB.prepare("DELETE FROM club_benefits WHERE partner_id = ?").bind(id),
       env.DB.prepare("DELETE FROM club_coupons WHERE partner_id = ?").bind(id),
       env.DB.prepare("DELETE FROM club_partners WHERE id = ?").bind(id)
     ]);
     if (!results[4]?.meta?.changes) return notFound(`${label} não encontrado.`);
-    return json({ ok: true });
+    return json({ ok: true, deleted: true });
   }
 
   if (table === "club_members") {
@@ -601,6 +999,34 @@ export async function handleAdminClub({ request, env, path, method }) {
     const id = Number(couponMatch[1]);
     if (method === "PUT") return saveCoupon(request, env, id);
     if (method === "DELETE") return deleteAdminRecord(env, "club_coupons", id, "Cupom");
+  }
+
+  if (path === "/api/admin/club/referral-configs") {
+    if (method === "GET") return listReferralConfigs(env);
+    if (method === "POST") return saveReferralConfig(request, env);
+  }
+  const referralConfigMatch = path.match(/^\/api\/admin\/club\/referral-configs\/(\d+)$/);
+  if (referralConfigMatch && method === "PUT") {
+    return saveReferralConfig(request, env, Number(referralConfigMatch[1]));
+  }
+
+  if (path === "/api/admin/club/referrals" && method === "GET") {
+    return json(await listReferralRecords(request, env));
+  }
+  if (path === "/api/admin/club/referrals/manual" && method === "POST") {
+    return createManualReferral(request, env);
+  }
+  if (path === "/api/admin/club/referrals/mark-paid" && method === "POST") {
+    return markReferralCommissionsPaid(request, env);
+  }
+  const referralPaymentMatch = path.match(/^\/api\/admin\/club\/referrals\/(\d+)\/payment$/);
+  if (referralPaymentMatch && method === "PUT") {
+    return updateReferralPayment(request, env, Number(referralPaymentMatch[1]));
+  }
+  const referralMatch = path.match(/^\/api\/admin\/club\/referrals\/(\d+)$/);
+  if (referralMatch && method === "GET") {
+    const item = await referralDetail(env, Number(referralMatch[1]));
+    return item ? json(item) : notFound("Indicação não encontrada.");
   }
 
   if (path === "/api/admin/club/redemption-options" && method === "GET") {
@@ -863,6 +1289,7 @@ export async function handlePartner({ request, env, path, method }) {
     return json({ partner: { id: partner.id, name: partner.name, email: partner.email } });
   }
   if (path === "/api/partner/member" && method === "GET") return partnerMember(request, env, partner);
+  if (path === "/api/partner/referrals" && method === "GET") return partnerReferralSummary(request, env, partner);
   if (path === "/api/partner/redeem" && method === "POST") return redeem(request, env, partner);
   if (path === "/api/partner/redemptions" && method === "GET") return listRedemptions(request, env, partner.id);
   if (path === "/api/partner/logout" && method === "POST") {

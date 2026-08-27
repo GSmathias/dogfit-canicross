@@ -23,7 +23,8 @@
         <button class="nav-item" data-view="members">Associados</button>
         <button class="nav-item" data-view="partners">Parceiros</button>
         <button class="nav-item" data-view="benefits">Benefícios</button>
-        <button class="nav-item" data-view="coupons">Cupons</button>
+        <button class="nav-item" data-view="coupons">Cupons do Clube</button>
+        <button class="nav-item" data-view="referrals">Indicações de pet shops</button>
         <button class="nav-item" data-view="redemptions">Utilizações</button>
       </nav>
       <div class="sidebar-bottom">
@@ -60,6 +61,7 @@
           <button class="quick-card" data-go="members"><span>+</span><div><strong>Novo associado</strong><small>Cadastro e carteirinha</small></div></button>
           <button class="quick-card" data-go="partners"><span>⌂</span><div><strong>Novo parceiro</strong><small>Acesso limitado e seguro</small></div></button>
           <button class="quick-card" data-go="coupons"><span>%</span><div><strong>Criar cupom</strong><small>Regras e limites de uso</small></div></button>
+          <button class="quick-card" data-go="referrals"><span>↗</span><div><strong>Indicações de pet shops</strong><small>Cupons, vendas e comissões</small></div></button>
           <button class="quick-card" data-go="redemptions"><span>✓</span><div><strong>Ver utilizações</strong><small>Histórico de descontos</small></div></button>
         </div>
       </section>
@@ -87,6 +89,7 @@
             <label class="field"><span>Válido até</span><input id="memberValidUntil" type="date"></label>
             <label class="field"><span>Pagamento</span><select id="memberPayment"><option value="paid">Pago</option><option value="pending">Pendente</option><option value="overdue">Atrasado</option></select></label>
             <label class="field"><span>Status do cadastro</span><select id="memberStatus"><option value="active">Ativo</option><option value="inactive">Inativo</option></select></label>
+            <label class="field"><span>Cupom de indicação <small>opcional, só na 1ª mensalidade</small></span><input id="memberReferralCode" maxlength="32" placeholder="Ex.: DOGMANIA"></label>
             <label class="field field-wide"><span>Observações internas</span><textarea id="memberNotes" rows="3" maxlength="1000"></textarea></label>
             <div class="form-actions field-wide"><button class="btn btn-ghost" data-close="memberEditor" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Salvar associado</button></div>
           </form>
@@ -146,7 +149,7 @@
 
       <section id="couponsView" class="club-view">
         <div class="section-toolbar">
-          <div><h2>Cupons de desconto</h2><p>Campanhas temporárias e cupons de uso único ou limitado.</p></div>
+          <div><h2>Cupons de benefício do Clube</h2><p>Campanhas e descontos para associados. Estes cupons são separados dos cupons de indicação de pet shops.</p></div>
           <button class="btn btn-primary" id="newCouponBtn" type="button">+ Novo cupom</button>
         </div>
         <div id="couponsList" class="data-list"></div>
@@ -171,6 +174,92 @@
         </div>
       </section>
 
+      <section id="referralsView" class="club-view">
+        <div class="section-toolbar">
+          <div><h2>Indicações de pet shops</h2><p>Cupons exclusivos para medir indicações, descontos e comissões sem misturar com os cupons do Clube.</p></div>
+          <div class="toolbar-actions">
+            <button class="btn btn-ghost" id="newReferralPartnerBtn" type="button">+ Cadastrar pet shop</button>
+            <button class="btn btn-primary" id="newReferralConfigBtn" type="button">+ Criar cupom de indicação</button>
+          </div>
+        </div>
+
+        <div class="notice referral-notice"><strong>Regra financeira.</strong> Pré-inscrição e pagamento pendente não liberam comissão. A comissão só é liberada após pagamento aprovado e é cancelada em cancelamento/estorno/reembolso.</div>
+
+        <div class="stats-grid referral-stats">
+          <article class="stat-card"><span>Indicações</span><strong id="referralStatTotal">0</strong><small>registradas</small></article>
+          <article class="stat-card"><span>Pagamentos</span><strong id="referralStatApproved">0</strong><small>aprovados</small></article>
+          <article class="stat-card"><span>Total vendido</span><strong id="referralStatSales">R$ 0,00</strong><small>valor efetivamente pago</small></article>
+          <article class="stat-card"><span>Comissão pendente</span><strong id="referralStatPending">R$ 0,00</strong><small>liberada e não paga</small></article>
+          <article class="stat-card"><span>Comissão paga</span><strong id="referralStatPaid">R$ 0,00</strong><small>já repassada</small></article>
+        </div>
+
+        <div class="subsection-head"><div><h3>Pet shops e códigos</h3><p>Configuração individual de desconto, comissão e validade.</p></div></div>
+        <div class="table-scroll referral-table-wrap">
+          <table class="referral-table">
+            <thead><tr><th>Pet shop</th><th>Código</th><th>Indicações</th><th>Aprovados</th><th>Total vendido</th><th>Comissão pendente</th><th>Comissão paga</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody id="referralPartnersTable"><tr><td colspan="9">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="editor-card hidden" id="referralConfigEditor">
+          <div class="editor-head"><div><p class="eyebrow">CUPOM DE INDICAÇÃO</p><h3 id="referralConfigEditorTitle">Novo cupom de indicação</h3></div><button class="icon-btn" data-close="referralConfigEditor" type="button">×</button></div>
+          <form id="referralConfigForm" class="form-grid">
+            <input id="referralConfigId" type="hidden">
+            <label class="field"><span>Pet shop parceiro</span><select id="referralConfigPartner" required><option value="">Selecione</option></select></label>
+            <label class="field"><span>Código exclusivo</span><input id="referralConfigCode" required maxlength="32" placeholder="DOGMANIA"></label>
+            <label class="field"><span>Tipo de desconto do cliente</span><select id="referralDiscountType"><option value="percentage">Percentual (%)</option><option value="fixed">Valor fixo (R$)</option></select></label>
+            <label class="field"><span>Desconto do cliente</span><input id="referralDiscountValue" inputmode="decimal" value="5" required></label>
+            <label class="field"><span>Comissão por evento (R$)</span><input id="referralEventCommission" inputmode="decimal" value="5,00" required></label>
+            <label class="field"><span>Comissão 1ª mensalidade do Clube (R$)</span><input id="referralClubCommission" inputmode="decimal" value="10,00" required></label>
+            <label class="field"><span>Comissão de produtos (%)</span><input id="referralProductCommission" inputmode="decimal" value="10" required></label>
+            <label class="field"><span>Limite por cliente</span><input id="referralCustomerLimit" type="number" min="1" value="1" required></label>
+            <label class="field"><span>Validade <small>opcional</small></span><input id="referralValidUntil" type="date"></label>
+            <label class="toggle-field"><input id="referralStacking" type="checkbox"><span>Permitir acumular com outro desconto</span></label>
+            <label class="toggle-field"><input id="referralConfigActive" type="checkbox" checked><span>Código ativo</span></label>
+            <div class="notice field-wide compact-notice">Valores financeiros são salvos em centavos no D1. O cálculo final é feito no Worker; o navegador nunca define o valor do desconto.</div>
+            <div class="form-actions field-wide"><button class="btn btn-ghost" data-close="referralConfigEditor" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Salvar cupom de indicação</button></div>
+          </form>
+        </div>
+
+        <div class="subsection-head referral-history-head">
+          <div><h3>Indicações e comissões</h3><p>Histórico financeiro preservado para auditoria.</p></div>
+          <button class="btn btn-ghost" id="newManualReferralBtn" type="button">+ Registrar venda manual</button>
+        </div>
+        <div class="referral-filters">
+          <select id="referralFilterPartner"><option value="">Todos os parceiros</option></select>
+          <select id="referralFilterSource"><option value="">Todos os tipos</option><option value="event">Evento</option><option value="club">Clube</option><option value="product">Produto</option></select>
+          <select id="referralFilterPayment"><option value="">Pagamento: todos</option><option value="pending">Pendente</option><option value="approved">Aprovado</option><option value="cancelled">Cancelado</option><option value="refunded">Reembolsado</option></select>
+          <select id="referralFilterCommission"><option value="">Comissão: todas</option><option value="pending">Pendente</option><option value="released">Liberada</option><option value="paid">Paga</option><option value="cancelled">Cancelada</option></select>
+          <input id="referralFilterFrom" type="date" aria-label="Data inicial">
+          <input id="referralFilterTo" type="date" aria-label="Data final">
+          <input id="referralFilterQuery" placeholder="Código, cliente ou referência...">
+          <button class="small-btn" id="referralFilterApply" type="button">Filtrar</button>
+        </div>
+        <div class="commission-actions"><button class="btn btn-primary" id="markReferralPaidBtn" type="button">Marcar selecionadas como pagas</button><span id="referralSelectionInfo">0 selecionadas</span></div>
+        <div class="table-scroll referral-table-wrap">
+          <table class="referral-table">
+            <thead><tr><th><input id="referralSelectAll" type="checkbox" aria-label="Selecionar comissões liberadas"></th><th>Data</th><th>Parceiro</th><th>Origem</th><th>Cliente</th><th>Valor final</th><th>Pagamento</th><th>Comissão</th><th>Ações</th></tr></thead>
+            <tbody id="referralRecordsTable"><tr><td colspan="9">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="editor-card hidden" id="manualReferralEditor">
+          <div class="editor-head"><div><p class="eyebrow">VENDA MANUAL</p><h3>Registrar indicação de Clube ou produto</h3></div><button class="icon-btn" data-close="manualReferralEditor" type="button">×</button></div>
+          <form id="manualReferralForm" class="form-grid">
+            <label class="field"><span>Cupom/parceiro</span><select id="manualReferralSetting" required></select></label>
+            <label class="field"><span>Origem</span><select id="manualReferralSource"><option value="club">Clube DOGFIT</option><option value="product">Produto</option></select></label>
+            <label class="field"><span>E-mail do cliente</span><input id="manualReferralEmail" type="email" maxlength="180"></label>
+            <label class="field"><span>Telefone do cliente</span><input id="manualReferralPhone" maxlength="30"></label>
+            <label class="field"><span>Valor original (R$)</span><input id="manualReferralOriginal" inputmode="decimal" required></label>
+            <label class="field"><span>Outro desconto já aplicado (R$)</span><input id="manualReferralOtherDiscount" inputmode="decimal" value="0,00"></label>
+            <label class="field"><span>Referência <small>opcional</small></span><input id="manualReferralReference" maxlength="120" placeholder="PEDIDO-123"></label>
+            <label class="field"><span>Status do pagamento</span><select id="manualReferralPayment"><option value="pending">Pendente</option><option value="approved">Aprovado</option><option value="cancelled">Cancelado</option><option value="refunded">Reembolsado</option></select></label>
+            <div class="notice field-wide compact-notice">Use esta opção apenas enquanto Clube e produtos não possuem checkout próprio. A mesma função central de liberação de comissão é usada pela confirmação automática e pela manual.</div>
+            <div class="form-actions field-wide"><button class="btn btn-ghost" data-close="manualReferralEditor" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Registrar indicação</button></div>
+          </form>
+        </div>
+      </section>
+
       <section id="redemptionsView" class="club-view">
         <div class="section-toolbar"><div><h2>Histórico de utilizações</h2><p>Registre também os eventos gratuitos e as camisas entregues pela DOGFIT.</p></div><button class="btn btn-primary" id="newRedemptionBtn" type="button">+ Registrar utilização</button></div>
         <div class="filters-bar single-filter"><input id="redemptionSearch" placeholder="Buscar associado ou cupom..."></div>
@@ -188,7 +277,18 @@
       </section>
     </main>
   </div>
+  <dialog id="referralDetailDialog" class="club-dialog">
+    <div class="dialog-head"><div><p class="eyebrow">DETALHES</p><h3>Indicação</h3></div><button class="icon-btn" id="referralDetailClose" type="button">×</button></div>
+    <div id="referralDetailContent"></div>
+  </dialog>
+  <dialog id="referralQrDialog" class="club-dialog qr-dialog">
+    <div class="dialog-head"><div><p class="eyebrow">LINK DO PARCEIRO</p><h3 id="referralQrTitle">QR Code</h3></div><button class="icon-btn" id="referralQrClose" type="button">×</button></div>
+    <div id="referralQrCode" class="qr-box"></div>
+    <input id="referralQrLink" class="readonly-link" readonly>
+    <div class="form-actions"><button class="btn btn-ghost" id="referralQrCopy" type="button">Copiar link</button><button class="btn btn-primary" id="referralQrDownload" type="button">Baixar QR Code</button></div>
+  </dialog>
   <div id="toast" class="toast" role="status"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="js/club-admin.js" defer></script>
 </body>
 </html>

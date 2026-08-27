@@ -11,6 +11,10 @@ function money(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function moneyCents(value) {
+  return (Number(value || 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 function dateBR(value) {
   if (!value) return "—";
   const parsed = new Date(value.replace(" ", "T") + (value.includes("T") ? "" : "Z"));
@@ -68,7 +72,85 @@ function showPortal() {
   $("portalView").classList.remove("hidden");
   $("logoutBtn").classList.remove("hidden");
   $("partnerName").textContent = session?.partner?.name || "Parceiro DOGFIT";
-  loadHistory();
+  Promise.all([loadHistory(), loadPartnerReferrals()]).catch(() => {});
+}
+
+
+async function copyPartnerReferralLink(value) {
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = value;
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  const button = $("partnerReferralCopy");
+  if (button) {
+    const old = button.textContent;
+    button.textContent = "Link copiado!";
+    setTimeout(() => button.textContent = old, 1600);
+  }
+}
+
+function renderPartnerReferral(data) {
+  const box = $("partnerReferralContent");
+  const status = $("partnerReferralStatus");
+  if (!data?.configured) {
+    status.textContent = "Não configurado";
+    status.className = "status off";
+    box.innerHTML = '<div class="empty">A DOGFIT ainda não configurou um cupom de indicação para este parceiro.</div>';
+    return;
+  }
+  const active = Boolean(data.setting?.active_effective) && (!data.setting.valid_until || data.setting.valid_until >= new Date().toISOString().slice(0, 10));
+  status.textContent = active ? "Código ativo" : "Código indisponível";
+  status.className = `status${active ? "" : " off"}`;
+  box.innerHTML = `
+    <div class="referral-partner-layout">
+      <div>
+        <div class="referral-code-display"><small>SEU CÓDIGO</small><strong>${escapeHtml(data.setting.code)}</strong></div>
+        <label class="referral-link-field"><span>Link exclusivo</span><input id="partnerReferralLink" readonly value="${escapeHtml(data.link)}"></label>
+        <div class="referral-actions"><button class="btn btn-primary" id="partnerReferralCopy" type="button">Copiar link</button><button class="btn btn-ghost" id="partnerReferralDownload" type="button">Baixar QR Code</button></div>
+      </div>
+      <div id="partnerReferralQr" class="partner-referral-qr"></div>
+    </div>
+    <div class="partner-referral-stats">
+      <div><span>Indicações</span><strong>${Number(data.stats?.referrals || 0)}</strong></div>
+      <div><span>Pagamentos aprovados</span><strong>${Number(data.stats?.approved || 0)}</strong></div>
+      <div><span>Total vendido</span><strong>${escapeHtml(moneyCents(data.stats?.total_sold_cents))}</strong></div>
+      <div><span>Comissões pendentes</span><strong>${escapeHtml(moneyCents(data.stats?.pending_commission_cents))}</strong></div>
+      <div><span>Comissões pagas</span><strong>${escapeHtml(moneyCents(data.stats?.paid_commission_cents))}</strong></div>
+    </div>
+    <p class="referral-privacy-note">Este portal mostra somente os resultados do seu próprio código. A DOGFIT é a única responsável por confirmar pagamentos e marcar comissões como pagas.</p>`;
+  $("partnerReferralCopy").onclick = () => copyPartnerReferralLink(data.link);
+  const qrBox = $("partnerReferralQr");
+  if (window.QRCode) {
+    new QRCode(qrBox, { text: data.link, width: 190, height: 190, correctLevel: QRCode.CorrectLevel.M });
+  } else {
+    qrBox.innerHTML = '<div class="empty">QR Code indisponível.</div>';
+  }
+  $("partnerReferralDownload").onclick = () => {
+    const canvas = qrBox.querySelector("canvas");
+    const image = qrBox.querySelector("img");
+    const url = canvas?.toDataURL("image/png") || image?.src;
+    if (!url) return;
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `dogfit-${String(data.setting.code || "indicacao").toLowerCase()}.png`;
+    link.click();
+  };
+}
+
+async function loadPartnerReferrals() {
+  try {
+    renderPartnerReferral(await request("/api/partner/referrals"));
+  } catch (error) {
+    $("partnerReferralContent").innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+    $("partnerReferralStatus").textContent = "Erro";
+    $("partnerReferralStatus").className = "status off";
+  }
 }
 
 $("loginForm").onsubmit = async event => {

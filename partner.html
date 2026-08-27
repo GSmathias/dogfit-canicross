@@ -21,6 +21,10 @@
     </section>
 
     <section id="portalView" class="hidden">
+      <div class="panel referral-partner-panel" id="partnerReferralPanel">
+        <div class="member-head"><div><p class="eyebrow">INDICAÇÕES DOGFIT</p><h2>Seu cupom de indicação</h2></div><span id="partnerReferralStatus" class="status">Carregando</span></div>
+        <div id="partnerReferralContent"><div class="empty">Carregando dados da indicação...</div></div>
+      </div>
       <div class="panel">
         <p class="eyebrow">VALIDAÇÃO DE ASSOCIADO</p><h2>Consultar carteirinha</h2><p class="lead">Digite o código exibido na carteirinha DOGFIT do cliente.</p>
         <form id="memberSearchForm" class="search-card"><input id="memberCode" required maxlength="30" placeholder="DFC-XXXXXX"><button class="btn btn-primary" type="submit">Consultar</button></form>
@@ -40,6 +44,7 @@
       <div class="dialog-actions"><button id="cancelRedeem" class="btn btn-ghost" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Confirmar utilização</button></div>
     </form>
   </dialog>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="js/partner.js" defer></script>
 </body>
 </html>

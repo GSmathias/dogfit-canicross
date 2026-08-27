@@ -515,6 +515,23 @@
             <input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="120" required placeholder="Mínimo 8 caracteres">
             <small class="registration-hint">Primeira vez? Crie sua senha aqui. Se já possui conta, informe sua senha atual. Você não precisará preencher seus dados novamente.</small>
           </label>
+          <div class="registration-field registration-wide referral-code-field">
+            <span>Cupom de indicação <small>(opcional)</small></span>
+            <div class="referral-code-control">
+              <input name="referral_code" id="registrationReferralCode" maxlength="32" autocomplete="off" placeholder="Ex.: DOGMANIA" aria-describedby="registrationReferralMessage">
+              <button type="button" class="referral-apply" id="registrationReferralApply">APLICAR</button>
+            </div>
+            <small class="registration-hint">Recebeu este código de um pet shop parceiro? Digite aqui para ativar seu desconto.</small>
+            <p class="referral-message" id="registrationReferralMessage" role="status" aria-live="polite"></p>
+            <div class="referral-summary" id="registrationReferralSummary" hidden>
+              <div><span>Parceiro</span><strong id="registrationReferralPartner">—</strong></div>
+              <div><span>Código aplicado</span><strong id="registrationReferralAppliedCode">—</strong></div>
+              <div><span>Desconto configurado</span><strong id="registrationReferralRule">—</strong></div>
+              <div><span>Valor original</span><strong id="registrationReferralOriginal">—</strong></div>
+              <div><span>Desconto</span><strong id="registrationReferralDiscount">—</strong></div>
+              <div class="referral-total"><span>Valor final</span><strong id="registrationReferralFinal">—</strong></div>
+            </div>
+          </div>
           <label class="registration-field">
             <span>Nome do cachorro</span>
             <input name="dog_name" maxlength="120" required>
@@ -585,6 +602,7 @@
           <strong>MERCADO PAGO</strong>
           <span>IR PARA O PAGAMENTO →</span>
         </a>
+        <p class="registration-referral-success" id="registrationReferralSuccess" hidden></p>
         <p class="registration-code">Código da pré-inscrição: <strong id="registrationCode">—</strong></p>
       </div>
     </section>

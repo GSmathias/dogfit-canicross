@@ -7,7 +7,9 @@ const state = {
   partners: [],
   benefits: [],
   coupons: [],
-  redemptions: []
+  redemptions: [],
+  referralConfigs: [],
+  referrals: []
 };
 
 function escapeHtml(value) {
@@ -79,7 +81,7 @@ async function removeRecord(url, confirmation, successMessage, refresh) {
 function switchView(name) {
   document.querySelectorAll(".club-view").forEach(view => view.classList.toggle("active", view.id === `${name}View`));
   document.querySelectorAll("[data-view]").forEach(item => item.classList.toggle("active", item.dataset.view === name));
-  const titles = { overview: "Gestão do Clube", members: "Associados", partners: "Parceiros", benefits: "Benefícios", coupons: "Cupons", redemptions: "Utilizações" };
+  const titles = { overview: "Gestão do Clube", members: "Associados", partners: "Parceiros", benefits: "Benefícios", coupons: "Cupons do Clube", referrals: "Indicações de pet shops", redemptions: "Utilizações" };
   $("viewTitle").textContent = titles[name] || "Gestão do Clube";
   document.querySelector(".sidebar").classList.remove("open");
 }
@@ -160,6 +162,9 @@ function resetMemberForm() {
   $("memberJoined").value = today;
   $("memberPayment").value = "paid";
   $("memberStatus").value = "active";
+  $("memberReferralCode").value = "";
+  $("memberReferralCode").readOnly = false;
+  $("memberReferralCode").title = "";
   $("memberEditorTitle").textContent = "Novo associado";
 }
 
@@ -178,6 +183,9 @@ function editMember(id) {
   $("memberValidUntil").value = member.valid_until || "";
   $("memberPayment").value = member.payment_status || "pending";
   $("memberStatus").value = member.status || "inactive";
+  $("memberReferralCode").value = member.referral_code || "";
+  $("memberReferralCode").readOnly = Boolean(member.referral_code);
+  $("memberReferralCode").title = member.referral_code ? "O cupom já registrado é preservado para manter o histórico financeiro." : "";
   $("memberNotes").value = member.notes || "";
   $("memberEditorTitle").textContent = "Editar associado";
   openEditor("memberEditor");
@@ -199,15 +207,16 @@ $("memberForm").onsubmit = async event => {
     valid_until: $("memberValidUntil").value,
     payment_status: $("memberPayment").value,
     status: $("memberStatus").value,
+    referral_code: $("memberReferralCode").value,
     notes: $("memberNotes").value
   };
   try {
-    await request(id ? `/api/admin/club/members/${id}` : "/api/admin/club/members", { method: id ? "PUT" : "POST", body: JSON.stringify(data) });
+    const result = await request(id ? `/api/admin/club/members/${id}` : "/api/admin/club/members", { method: id ? "PUT" : "POST", body: JSON.stringify(data) });
     closeEditor("memberEditor");
-    await loadMembers();
-    await loadDashboard();
+    await Promise.all([loadMembers(), loadDashboard(), loadReferralConfigs(), loadReferrals()]);
     fillMemberOptions();
-    toast(id ? "Associado atualizado." : "Associado cadastrado.");
+    renderReferralTotals();
+    toast(result.referral_warning || (id ? "Associado atualizado." : "Associado cadastrado."), Boolean(result.referral_warning));
   } catch (error) { toast(error.message, true); }
 };
 
@@ -236,12 +245,14 @@ function renderPartners() {
     const partner = state.partners.find(item => item.id === Number(button.dataset.deletePartner));
     removeRecord(
       `/api/admin/club/partners/${button.dataset.deletePartner}`,
-      `Excluir definitivamente ${partner?.name || "este parceiro"}? A conta do parceiro, sessões, benefícios, cupons e utilizações vinculadas serão removidos do banco.`,
-      "Parceiro excluído.",
+      `Remover ${partner?.name || "este parceiro"}? Se houver histórico de utilizações, indicações ou comissões, o parceiro será apenas desativado para preservar a auditoria financeira.`,
+      "Parceiro removido ou desativado com histórico preservado.",
       async () => {
-        await Promise.all([loadPartners(), loadBenefits(), loadCoupons(), loadRedemptions(), loadDashboard()]);
+        await Promise.all([loadPartners(), loadBenefits(), loadCoupons(), loadRedemptions(), loadDashboard(), loadReferralConfigs(), loadReferrals()]);
         fillPartnerOptions();
+        fillReferralOptions();
         fillRedemptionItems();
+        renderReferralTotals();
       }
     );
   });
@@ -297,8 +308,9 @@ $("partnerForm").onsubmit = async event => {
   try {
     await request(id ? `/api/admin/club/partners/${id}` : "/api/admin/club/partners", { method: id ? "PUT" : "POST", body: JSON.stringify(data) });
     closeEditor("partnerEditor");
-    await Promise.all([loadPartners(), loadDashboard()]);
+    await Promise.all([loadPartners(), loadDashboard(), loadReferralConfigs()]);
     fillPartnerOptions();
+    fillReferralOptions();
     toast(id ? "Parceiro atualizado." : "Parceiro cadastrado.");
   } catch (error) { toast(error.message, true); }
 };
@@ -518,6 +530,404 @@ $("redemptionForm").onsubmit = async event => {
   }
 };
 
+
+function moneyCents(value) {
+  return (Number(value || 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function referralSourceLabel(value) {
+  return ({ event: "Evento", club: "Clube", product: "Produto" })[value] || value || "—";
+}
+
+function referralPaymentLabel(value) {
+  return ({ pending: "Pendente", approved: "Aprovado", cancelled: "Cancelado", refunded: "Reembolsado" })[value] || value || "—";
+}
+
+function referralCommissionLabel(value) {
+  return ({ pending: "Pendente", released: "Liberada", paid: "Paga", cancelled: "Cancelada" })[value] || value || "—";
+}
+
+function referralStatusClass(value) {
+  if (["approved", "released", "paid"].includes(value)) return "";
+  if (["cancelled", "refunded"].includes(value)) return " off";
+  return " warn";
+}
+
+function referralLink(item) {
+  return `${location.origin}/pre-inscricao?ref=${encodeURIComponent(item.code || "")}`;
+}
+
+async function copyText(value, success = "Link copiado.") {
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = value;
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  toast(success);
+}
+
+function renderReferralTotals() {
+  const configs = state.referralConfigs || [];
+  const totals = configs.reduce((acc, item) => {
+    acc.referrals += Number(item.referral_count || 0);
+    acc.approved += Number(item.approved_count || 0);
+    acc.sales += Number(item.total_sold_cents || 0);
+    acc.pending += Number(item.pending_commission_cents || 0);
+    acc.paid += Number(item.paid_commission_cents || 0);
+    return acc;
+  }, { referrals: 0, approved: 0, sales: 0, pending: 0, paid: 0 });
+  $("referralStatTotal").textContent = totals.referrals;
+  $("referralStatApproved").textContent = totals.approved;
+  $("referralStatSales").textContent = moneyCents(totals.sales);
+  $("referralStatPending").textContent = moneyCents(totals.pending);
+  $("referralStatPaid").textContent = moneyCents(totals.paid);
+}
+
+function referralConfigPayload(item, overrides = {}) {
+  return {
+    partner_id: item.partner_id,
+    code: item.code,
+    active: Boolean(Number(item.active)),
+    customer_discount_type: item.customer_discount_type,
+    customer_discount_value: Number(item.customer_discount_value || 0),
+    event_commission: Number(item.event_commission || 0),
+    club_commission: Number(item.club_commission || 0),
+    product_commission_percent: Number(item.product_commission_percent || 0),
+    per_customer_limit: Number(item.per_customer_limit || 1),
+    allow_stacking: Boolean(Number(item.allow_stacking)),
+    valid_until: item.valid_until || "",
+    ...overrides
+  };
+}
+
+function referralConfigStatus(item) {
+  const expired = item.valid_until && item.valid_until < today;
+  if (!Number(item.partner_active)) return { label: "Parceiro inativo", className: " off" };
+  if (!Number(item.active)) return { label: "Desativado", className: " off" };
+  if (expired) return { label: "Vencido", className: " warn" };
+  return { label: "Ativo", className: "" };
+}
+
+function renderReferralConfigs() {
+  const tbody = $("referralPartnersTable");
+  if (!state.referralConfigs.length) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">Nenhum cupom de indicação configurado.</div></td></tr>';
+    renderReferralTotals();
+    return;
+  }
+  tbody.innerHTML = state.referralConfigs.map(item => {
+    const status = referralConfigStatus(item);
+    return `
+      <tr>
+        <td><strong>${escapeHtml(item.partner_name)}</strong></td>
+        <td><span class="code-chip">${escapeHtml(item.code)}</span></td>
+        <td>${Number(item.referral_count || 0)}</td>
+        <td>${Number(item.approved_count || 0)}</td>
+        <td>${escapeHtml(moneyCents(item.total_sold_cents))}</td>
+        <td>${escapeHtml(moneyCents(item.pending_commission_cents))}</td>
+        <td>${escapeHtml(moneyCents(item.paid_commission_cents))}</td>
+        <td><span class="status-pill${status.className}">${escapeHtml(status.label)}</span></td>
+        <td class="table-actions">
+          <button class="small-btn" data-referral-config-view="${item.id}">Visualizar</button>
+          <button class="small-btn" data-referral-config-edit="${item.id}">Editar</button>
+          <button class="small-btn" data-referral-config-copy="${item.id}">Copiar link</button>
+          <button class="small-btn" data-referral-config-qr="${item.id}">QR Code</button>
+          <button class="small-btn danger" data-referral-config-toggle="${item.id}">${Number(item.active) ? "Desativar" : "Ativar"}</button>
+        </td>
+      </tr>`;
+  }).join("");
+
+  tbody.querySelectorAll("[data-referral-config-edit]").forEach(button => button.onclick = () => editReferralConfig(Number(button.dataset.referralConfigEdit)));
+  tbody.querySelectorAll("[data-referral-config-copy]").forEach(button => button.onclick = () => {
+    const item = state.referralConfigs.find(value => value.id === Number(button.dataset.referralConfigCopy));
+    if (item) copyText(referralLink(item));
+  });
+  tbody.querySelectorAll("[data-referral-config-qr]").forEach(button => button.onclick = () => {
+    const item = state.referralConfigs.find(value => value.id === Number(button.dataset.referralConfigQr));
+    if (item) openReferralQr(item);
+  });
+  tbody.querySelectorAll("[data-referral-config-view]").forEach(button => button.onclick = async () => {
+    const item = state.referralConfigs.find(value => value.id === Number(button.dataset.referralConfigView));
+    if (!item) return;
+    $("referralFilterPartner").value = String(item.partner_id);
+    await loadReferrals();
+    document.querySelector(".referral-history-head")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  tbody.querySelectorAll("[data-referral-config-toggle]").forEach(button => button.onclick = async () => {
+    const item = state.referralConfigs.find(value => value.id === Number(button.dataset.referralConfigToggle));
+    if (!item) return;
+    const active = !Number(item.active);
+    if (!active && !window.confirm(`Desativar o código ${item.code}? O histórico e as comissões serão preservados.`)) return;
+    try {
+      await request(`/api/admin/club/referral-configs/${item.id}`, { method: "PUT", body: JSON.stringify(referralConfigPayload(item, { active })) });
+      await loadReferralConfigs();
+      fillReferralOptions();
+      toast(active ? "Cupom de indicação ativado." : "Cupom desativado. Histórico preservado.");
+    } catch (error) { toast(error.message, true); }
+  });
+  renderReferralTotals();
+}
+
+function fillReferralOptions() {
+  const partnerOptions = state.partners.map(item => `<option value="${item.id}">${escapeHtml(item.name)}${item.active ? "" : " (inativo)"}</option>`).join("");
+  $("referralConfigPartner").innerHTML = '<option value="">Selecione</option>' + partnerOptions;
+  $("referralFilterPartner").innerHTML = '<option value="">Todos os parceiros</option>' + partnerOptions;
+  const activeConfigs = state.referralConfigs.filter(item => item.active_effective);
+  $("manualReferralSetting").innerHTML = activeConfigs.length
+    ? activeConfigs.map(item => `<option value="${item.id}">${escapeHtml(item.partner_name)} · ${escapeHtml(item.code)}</option>`).join("")
+    : '<option value="">Nenhum cupom ativo</option>';
+}
+
+function resetReferralConfigForm() {
+  $("referralConfigForm").reset();
+  $("referralConfigId").value = "";
+  $("referralConfigCode").value = "";
+  $("referralDiscountType").value = "percentage";
+  $("referralDiscountValue").value = "5";
+  $("referralEventCommission").value = "5,00";
+  $("referralClubCommission").value = "10,00";
+  $("referralProductCommission").value = "10";
+  $("referralCustomerLimit").value = "1";
+  $("referralStacking").checked = false;
+  $("referralConfigActive").checked = true;
+  $("referralConfigEditorTitle").textContent = "Novo cupom de indicação";
+}
+
+function editReferralConfig(id) {
+  const item = state.referralConfigs.find(value => value.id === id);
+  if (!item) return;
+  $("referralConfigId").value = item.id;
+  $("referralConfigPartner").value = item.partner_id;
+  $("referralConfigCode").value = item.code || "";
+  $("referralDiscountType").value = item.customer_discount_type || "percentage";
+  $("referralDiscountValue").value = String(item.customer_discount_value ?? 0).replace(".", ",");
+  $("referralEventCommission").value = Number(item.event_commission || 0).toFixed(2).replace(".", ",");
+  $("referralClubCommission").value = Number(item.club_commission || 0).toFixed(2).replace(".", ",");
+  $("referralProductCommission").value = String(item.product_commission_percent ?? 0).replace(".", ",");
+  $("referralCustomerLimit").value = item.per_customer_limit || 1;
+  $("referralValidUntil").value = item.valid_until || "";
+  $("referralStacking").checked = Boolean(Number(item.allow_stacking));
+  $("referralConfigActive").checked = Boolean(Number(item.active));
+  $("referralConfigEditorTitle").textContent = `Editar ${item.code}`;
+  openEditor("referralConfigEditor");
+}
+
+$("newReferralConfigBtn").onclick = () => { resetReferralConfigForm(); openEditor("referralConfigEditor"); };
+$("newReferralPartnerBtn").onclick = () => { switchView("partners"); resetPartnerForm(); openEditor("partnerEditor"); };
+$("referralConfigCode").oninput = () => {
+  $("referralConfigCode").value = $("referralConfigCode").value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 32);
+};
+$("referralConfigForm").onsubmit = async event => {
+  event.preventDefault();
+  const id = $("referralConfigId").value;
+  const data = {
+    partner_id: Number($("referralConfigPartner").value),
+    code: $("referralConfigCode").value,
+    active: $("referralConfigActive").checked,
+    customer_discount_type: $("referralDiscountType").value,
+    customer_discount_value: number($("referralDiscountValue").value) || 0,
+    event_commission: number($("referralEventCommission").value) || 0,
+    club_commission: number($("referralClubCommission").value) || 0,
+    product_commission_percent: number($("referralProductCommission").value) || 0,
+    per_customer_limit: Number($("referralCustomerLimit").value || 1),
+    allow_stacking: $("referralStacking").checked,
+    valid_until: $("referralValidUntil").value
+  };
+  try {
+    await request(id ? `/api/admin/club/referral-configs/${id}` : "/api/admin/club/referral-configs", {
+      method: id ? "PUT" : "POST", body: JSON.stringify(data)
+    });
+    closeEditor("referralConfigEditor");
+    await Promise.all([loadReferralConfigs(), loadReferrals()]);
+    fillReferralOptions();
+    toast(id ? "Cupom de indicação atualizado." : "Cupom de indicação criado.");
+  } catch (error) { toast(error.message, true); }
+};
+
+function currentReferralFilters() {
+  const params = new URLSearchParams();
+  const fields = {
+    partner_id: $("referralFilterPartner").value,
+    source_type: $("referralFilterSource").value,
+    payment_status: $("referralFilterPayment").value,
+    commission_status: $("referralFilterCommission").value,
+    from: $("referralFilterFrom").value,
+    to: $("referralFilterTo").value,
+    q: $("referralFilterQuery").value.trim()
+  };
+  Object.entries(fields).forEach(([key, value]) => { if (value) params.set(key, value); });
+  return params;
+}
+
+function renderReferralRecords() {
+  const tbody = $("referralRecordsTable");
+  if (!state.referrals.length) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">Nenhuma indicação encontrada com estes filtros.</div></td></tr>';
+    $("referralSelectionInfo").textContent = "0 selecionadas";
+    return;
+  }
+  tbody.innerHTML = state.referrals.map(item => {
+    const customer = item.customer_name || item.customer_email || item.customer_phone || "Cliente não identificado";
+    const selectable = item.payment_status === "approved" && item.commission_status === "released";
+    return `
+      <tr>
+        <td>${selectable ? `<input class="referral-select" type="checkbox" value="${item.id}" aria-label="Selecionar comissão">` : ""}</td>
+        <td>${escapeHtml(dateBR(item.referred_at, true))}</td>
+        <td><strong>${escapeHtml(item.partner_name)}</strong><br><span class="code-chip">${escapeHtml(item.code_snapshot)}</span></td>
+        <td>${escapeHtml(referralSourceLabel(item.source_type))}<br><small>${escapeHtml(item.source_reference)}</small></td>
+        <td>${escapeHtml(customer)}</td>
+        <td><strong>${escapeHtml(moneyCents(item.final_amount_cents))}</strong></td>
+        <td><span class="status-pill${referralStatusClass(item.payment_status)}">${escapeHtml(referralPaymentLabel(item.payment_status))}</span></td>
+        <td><strong>${escapeHtml(moneyCents(item.commission_amount_cents))}</strong><br><span class="status-pill${referralStatusClass(item.commission_status)}">${escapeHtml(referralCommissionLabel(item.commission_status))}</span>${item.commission_paid_at ? `<br><small>${escapeHtml(dateBR(item.commission_paid_at, true))}</small>` : ""}</td>
+        <td class="table-actions">
+          <button class="small-btn" data-referral-detail="${item.id}">Detalhes</button>
+          ${item.payment_status === "pending" ? `<button class="small-btn orange" data-referral-approve="${item.id}">Confirmar pagamento</button>` : ""}
+          ${item.payment_status === "approved" ? `<button class="small-btn danger" data-referral-refund="${item.id}">Reembolsar</button>` : ""}
+        </td>
+      </tr>`;
+  }).join("");
+  tbody.querySelectorAll(".referral-select").forEach(input => input.onchange = updateReferralSelectionInfo);
+  tbody.querySelectorAll("[data-referral-detail]").forEach(button => button.onclick = () => openReferralDetail(Number(button.dataset.referralDetail)));
+  tbody.querySelectorAll("[data-referral-approve]").forEach(button => button.onclick = () => updateReferralPaymentStatus(Number(button.dataset.referralApprove), "approved"));
+  tbody.querySelectorAll("[data-referral-refund]").forEach(button => button.onclick = () => updateReferralPaymentStatus(Number(button.dataset.referralRefund), "refunded"));
+  $("referralSelectAll").checked = false;
+  updateReferralSelectionInfo();
+}
+
+function updateReferralSelectionInfo() {
+  const checked = [...document.querySelectorAll(".referral-select:checked")];
+  $("referralSelectionInfo").textContent = `${checked.length} selecionada${checked.length === 1 ? "" : "s"}`;
+}
+
+$("referralSelectAll").onchange = () => {
+  document.querySelectorAll(".referral-select").forEach(input => input.checked = $("referralSelectAll").checked);
+  updateReferralSelectionInfo();
+};
+$("referralFilterApply").onclick = () => loadReferrals();
+$("referralFilterQuery").addEventListener("keydown", event => { if (event.key === "Enter") loadReferrals(); });
+["referralFilterPartner", "referralFilterSource", "referralFilterPayment", "referralFilterCommission"].forEach(id => {
+  $(id).addEventListener("change", () => loadReferrals());
+});
+
+async function updateReferralPaymentStatus(id, paymentStatus) {
+  const label = paymentStatus === "approved" ? "confirmar este pagamento" : "registrar este pagamento como reembolsado";
+  if (!window.confirm(`Deseja ${label}? A comissão será atualizada pela mesma regra central do Mercado Pago.`)) return;
+  try {
+    await request(`/api/admin/club/referrals/${id}/payment`, { method: "PUT", body: JSON.stringify({ payment_status: paymentStatus }) });
+    await Promise.all([loadReferrals(), loadReferralConfigs()]);
+    toast(paymentStatus === "approved" ? "Pagamento confirmado e comissão liberada." : "Pagamento reembolsado e comissão cancelada.");
+  } catch (error) { toast(error.message, true); }
+}
+
+$("markReferralPaidBtn").onclick = async () => {
+  const ids = [...document.querySelectorAll(".referral-select:checked")].map(input => Number(input.value));
+  if (!ids.length) return toast("Selecione ao menos uma comissão liberada.", true);
+  if (!window.confirm(`Marcar ${ids.length} comissão(ões) como paga(s)?`)) return;
+  try {
+    const result = await request("/api/admin/club/referrals/mark-paid", { method: "POST", body: JSON.stringify({ ids }) });
+    await Promise.all([loadReferrals(), loadReferralConfigs()]);
+    toast(`${result.paid} comissão(ões) marcada(s) como paga(s).`);
+  } catch (error) { toast(error.message, true); }
+};
+
+async function openReferralDetail(id) {
+  try {
+    const item = await request(`/api/admin/club/referrals/${id}`);
+    const rows = [
+      ["Pet shop", item.partner_name_snapshot || item.partner_name],
+      ["Código", item.code_snapshot],
+      ["Origem", referralSourceLabel(item.source_type)],
+      ["Referência", item.source_reference],
+      ["Cliente", item.customer_name || item.member_name || item.customer_email || "—"],
+      ["E-mail", item.customer_email || "—"],
+      ["Telefone", item.customer_phone || "—"],
+      ["Valor original", moneyCents(item.original_amount_cents)],
+      ["Outro desconto", moneyCents(item.other_discount_amount_cents)],
+      ["Desconto de indicação", moneyCents(item.discount_amount_cents)],
+      ["Valor final", moneyCents(item.final_amount_cents)],
+      ["Pagamento", referralPaymentLabel(item.payment_status)],
+      ["Transação", item.payment_transaction_id || "—"],
+      ["Comissão", moneyCents(item.commission_amount_cents)],
+      ["Status da comissão", referralCommissionLabel(item.commission_status)],
+      ["Indicação", dateBR(item.referred_at, true)],
+      ["Pagamento confirmado", item.payment_confirmed_at ? dateBR(item.payment_confirmed_at, true) : "—"],
+      ["Comissão paga", item.commission_paid_at ? dateBR(item.commission_paid_at, true) : "—"]
+    ];
+    $("referralDetailContent").innerHTML = `<dl class="detail-grid">${rows.map(([key, value]) => `<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>`;
+    $("referralDetailDialog").showModal();
+  } catch (error) { toast(error.message, true); }
+}
+$("referralDetailClose").onclick = () => $("referralDetailDialog").close();
+
+let currentQrConfig = null;
+function openReferralQr(item) {
+  currentQrConfig = item;
+  const link = referralLink(item);
+  $("referralQrTitle").textContent = `${item.partner_name} · ${item.code}`;
+  $("referralQrLink").value = link;
+  const box = $("referralQrCode");
+  box.innerHTML = "";
+  if (window.QRCode) {
+    new QRCode(box, { text: link, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
+  } else {
+    box.innerHTML = '<p class="empty-state">Biblioteca de QR Code indisponível. Copie o link e tente novamente com conexão à internet.</p>';
+  }
+  $("referralQrDialog").showModal();
+}
+$("referralQrClose").onclick = () => $("referralQrDialog").close();
+$("referralQrCopy").onclick = () => copyText($("referralQrLink").value);
+$("referralQrDownload").onclick = () => {
+  const box = $("referralQrCode");
+  const canvas = box.querySelector("canvas");
+  const image = box.querySelector("img");
+  const url = canvas?.toDataURL("image/png") || image?.src;
+  if (!url) return toast("QR Code ainda não foi gerado.", true);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `dogfit-indicacao-${(currentQrConfig?.code || "parceiro").toLowerCase()}.png`;
+  link.click();
+};
+
+$("newManualReferralBtn").onclick = () => {
+  $("manualReferralForm").reset();
+  $("manualReferralOtherDiscount").value = "0,00";
+  openEditor("manualReferralEditor");
+};
+$("manualReferralForm").onsubmit = async event => {
+  event.preventDefault();
+  const data = {
+    referral_setting_id: Number($("manualReferralSetting").value),
+    source_type: $("manualReferralSource").value,
+    customer_email: $("manualReferralEmail").value,
+    customer_phone: $("manualReferralPhone").value,
+    original_amount: number($("manualReferralOriginal").value) || 0,
+    other_discount: number($("manualReferralOtherDiscount").value) || 0,
+    source_reference: $("manualReferralReference").value,
+    payment_status: $("manualReferralPayment").value
+  };
+  try {
+    await request("/api/admin/club/referrals/manual", { method: "POST", body: JSON.stringify(data) });
+    closeEditor("manualReferralEditor");
+    await Promise.all([loadReferrals(), loadReferralConfigs()]);
+    toast("Indicação registrada. A comissão segue o status do pagamento informado.");
+  } catch (error) { toast(error.message, true); }
+};
+
+async function loadReferralConfigs() {
+  state.referralConfigs = await request("/api/admin/club/referral-configs");
+  renderReferralConfigs();
+}
+async function loadReferrals() {
+  const params = currentReferralFilters();
+  state.referrals = await request(`/api/admin/club/referrals${params.toString() ? `?${params}` : ""}`);
+  renderReferralRecords();
+}
+
 async function loadDashboard() { state.dashboard = await request("/api/admin/club/dashboard"); renderDashboard(); }
 async function loadMembers(q = "") { state.members = await request(`/api/admin/club/members?q=${encodeURIComponent(q)}`); renderMembers(); }
 async function loadPartners() { state.partners = await request("/api/admin/club/partners"); renderPartners(); }
@@ -530,8 +940,11 @@ async function init() {
   try {
     await Promise.all([loadDashboard(), loadMembers(), loadPartners(), loadBenefits(), loadCoupons(), loadRedemptions()]);
     fillPartnerOptions(); fillMemberOptions(); fillRedemptionItems();
+    await Promise.all([loadReferralConfigs(), loadReferrals()]);
+    fillReferralOptions();
+    renderReferralTotals();
   } catch (error) {
-    console.error(error); toast("Não foi possível carregar o módulo. A migração do banco já foi aplicada?", true);
+    console.error(error); toast("Não foi possível carregar o módulo. A migration 0010 de indicações já foi aplicada?", true);
   }
 }
 

@@ -35,6 +35,8 @@
       "/account.html",
       "/parceiro",
       "/parceiro.html",
+      "/pre-inscricao",
+      "/pre-inscricao.html",
       "/clube/*"
     ]
   },

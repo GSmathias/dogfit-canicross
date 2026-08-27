@@ -2047,6 +2047,110 @@ body.modal-open {
   line-height: 1.45;
 }
 
+.referral-code-field > span small {
+  color: var(--muted);
+  font-size: .66rem;
+  font-weight: 700;
+}
+
+.referral-code-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.referral-code-control input {
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.referral-apply {
+  min-height: 50px;
+  padding: 0 18px;
+  border: 1px solid var(--orange);
+  border-radius: 7px;
+  color: var(--orange);
+  background: rgba(255,103,0,.08);
+  font: 900 .72rem/1 "Barlow", sans-serif;
+  letter-spacing: .07em;
+  cursor: pointer;
+}
+
+.referral-apply:hover:not(:disabled) {
+  color: #111;
+  background: var(--orange);
+}
+
+.referral-apply:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.referral-message {
+  min-height: 18px;
+  margin: 0;
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.referral-message.is-success {
+  color: #8ed59f;
+}
+
+.referral-message.is-error {
+  color: #ff9a9a;
+}
+
+.referral-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgba(255,103,0,.3);
+  border-radius: 8px;
+  background: rgba(255,103,0,.055);
+}
+
+.referral-summary[hidden] {
+  display: none;
+}
+
+.referral-summary > div {
+  display: grid;
+  gap: 3px;
+}
+
+.referral-summary span {
+  color: var(--muted);
+  font-size: .65rem;
+}
+
+.referral-summary strong {
+  color: #f6f6f3;
+  font-size: .84rem;
+}
+
+.referral-summary .referral-total {
+  grid-column: 1 / -1;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.referral-summary .referral-total strong {
+  color: var(--orange);
+  font-size: 1.05rem;
+}
+
+.registration-referral-success {
+  padding: 12px 14px;
+  border: 1px solid rgba(255,103,0,.3);
+  background: rgba(255,103,0,.07);
+  color: #e8e8e3 !important;
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
 .registration-wide {
   grid-column: 1 / -1;
 }
@@ -2274,6 +2378,22 @@ body.modal-open {
   }
 
   .registration-wide {
+    grid-column: 1;
+  }
+
+  .referral-code-control {
+    grid-template-columns: 1fr;
+  }
+
+  .referral-apply {
+    width: 100%;
+  }
+
+  .referral-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .referral-summary .referral-total {
     grid-column: 1;
   }
 }

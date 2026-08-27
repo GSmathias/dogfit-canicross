@@ -14,6 +14,7 @@ import {
   handlePayments,
   handlePublicEvent
 } from "./functions/api/clients.js";
+import { handlePublicReferrals } from "./functions/api/referrals.js";
 
 import {
   onRequestGet as getAdminContent,
@@ -145,6 +146,14 @@ export default {
         return env.ASSETS.fetch(assetRequest(request, "/partner"));
       }
 
+      if (path === "/pre-inscricao.html" || path === "/pre-inscricao/") {
+        return Response.redirect(`${url.origin}/pre-inscricao${url.search}`, 302);
+      }
+
+      if (path === "/pre-inscricao") {
+        return env.ASSETS.fetch(assetRequest(request, "/"));
+      }
+
       if (/^\/clube\/[a-f0-9-]{36}$/i.test(path)) {
         return env.ASSETS.fetch(assetRequest(request, "/member-card"));
       }
@@ -163,6 +172,10 @@ export default {
 
       if (path.startsWith("/api/partner/")) {
         return handlePartner({ request, env, ctx, path, method });
+      }
+
+      if (path.startsWith("/api/referrals/")) {
+        return handlePublicReferrals({ request, env, ctx, path, method });
       }
 
       if (path.startsWith("/api/events/")) {

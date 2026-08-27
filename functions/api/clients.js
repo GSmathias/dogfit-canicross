@@ -1,3 +1,14 @@
+import {
+  cancelReferralBySource,
+  cleanReferralCode,
+  createReferral,
+  moneyTextToCents,
+  normalizeReferralPaymentStatus,
+  numberToCents,
+  syncReferralPaymentBySource,
+  validateReferralCode
+} from "../_lib/referrals.js";
+
 const encoder = new TextEncoder();
 const SESSION_COOKIE = "dogfit_client_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
@@ -252,14 +263,10 @@ function registrationCode() {
   return `PRE-${new Date().getUTCFullYear()}-${randomHex(3).toUpperCase()}`;
 }
 
-function eventAmount(value) {
-  let normalized = clean(value, 50).replace(/[^0-9,.-]/g, "");
-  if (normalized.includes(",")) {
-    normalized = normalized.replace(/\./g, "").replace(",", ".");
-  }
-  const amount = Number(normalized);
-  return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) / 100 : 0;
+function eventAmountCents(value) {
+  return moneyTextToCents(value);
 }
+
 
 async function mercadoPagoRequest(env, pathname, options = {}) {
   const accessToken = clean(env.MERCADOPAGO_ACCESS_TOKEN, 1000);
@@ -280,9 +287,10 @@ async function mercadoPagoRequest(env, pathname, options = {}) {
   return result;
 }
 
-async function createPaymentPreference(request, env, registration, event) {
-  const amount = eventAmount(event.price);
-  if (!amount) throw new Error("INVALID_EVENT_PRICE");
+async function createPaymentPreference(request, env, registration, event, amountCents, referralCode = "") {
+  const cents = Math.max(0, Math.trunc(Number(amountCents) || 0));
+  if (!cents) throw new Error("INVALID_EVENT_PRICE");
+  const amount = cents / 100;
   const origin = new URL(request.url).origin;
   const nameParts = registration.full_name.split(/\s+/).filter(Boolean);
   const firstName = nameParts.shift() || registration.full_name;
@@ -316,35 +324,70 @@ async function createPaymentPreference(request, env, registration, event) {
       notification_url: `${origin}/api/payments/mercadopago`,
       metadata: {
         registration_code: registration.registration_code,
-        dog_name: registration.dog_name
+        dog_name: registration.dog_name,
+        referral_code: referralCode || undefined
       }
     })
   });
 }
+
 
 async function paymentFromMercadoPago(env, paymentId) {
   if (!/^\d+$/.test(String(paymentId || ""))) return null;
   return mercadoPagoRequest(env, `/v1/payments/${paymentId}`, { method: "GET" });
 }
 
-async function confirmMercadoPagoPayment(env, payment) {
-  if (!payment || payment.status !== "approved") return false;
+async function syncMercadoPagoPayment(env, payment) {
+  if (!payment) return { matched: false, approved: false };
   const code = clean(payment.external_reference, 80);
-  if (!/^PRE-\d{4}-[A-F0-9]{6}$/.test(code)) return false;
-  const reference = `Mercado Pago #${payment.id}`;
-  const result = await env.DB.prepare(`
+  if (!/^PRE-\d{4}-[A-F0-9]{6}$/.test(code)) return { matched: false, approved: false };
+
+  const referralPaymentStatus = normalizeReferralPaymentStatus(payment.status);
+  const registrationStatus = referralPaymentStatus === "approved"
+    ? "paid"
+    : ["cancelled", "refunded"].includes(referralPaymentStatus)
+      ? "cancelled"
+      : "pending";
+  const reference = payment.id ? `Mercado Pago #${payment.id}` : "Mercado Pago";
+
+  const current = await env.DB.prepare(
+    "SELECT id, payment_status FROM event_registrations WHERE registration_code = ?"
+  ).bind(code).first();
+  if (!current) return { matched: false, approved: false };
+  const effectiveRegistrationStatus = current.payment_status === "cancelled" && registrationStatus !== "cancelled"
+    ? "cancelled"
+    : current.payment_status === "paid" && registrationStatus === "pending"
+      ? "paid"
+      : registrationStatus;
+
+  await env.DB.prepare(`
     UPDATE event_registrations
-    SET payment_status = 'paid',
+    SET payment_status = ?,
       notes = CASE
+        WHEN ? = '' THEN notes
         WHEN notes LIKE ? THEN notes
         WHEN notes = '' THEN ?
         ELSE notes || char(10) || ?
       END,
       updated_at = datetime('now')
     WHERE registration_code = ?
-  `).bind(`%${reference}%`, reference, reference, code).run();
-  return Boolean(result.meta.changes);
+  `).bind(
+    effectiveRegistrationStatus, payment.id ? reference : "", `%${reference}%`, reference, reference, code
+  ).run();
+
+  await syncReferralPaymentBySource(env, {
+    sourceType: "event",
+    sourceReference: code,
+    paymentStatus: referralPaymentStatus,
+    paymentProvider: payment.id ? "mercadopago" : "",
+    paymentTransactionId: payment.id ? String(payment.id) : "",
+    paidAmountCents: payment.transaction_amount == null ? undefined : numberToCents(payment.transaction_amount),
+    confirmedAt: payment.date_approved || null
+  });
+
+  return { matched: true, approved: referralPaymentStatus === "approved", code };
 }
+
 
 function whatsappConfirmationUrl(code) {
   const message = `Inscrição realizada com sucesso! Código: ${code}. Realizei o pagamento pelo Mercado Pago e gostaria de finalizar minha inscrição.`;
@@ -359,7 +402,7 @@ async function handleMercadoPagoWebhook(request, env) {
   if (!paymentId) return json({ ok: true });
   try {
     const payment = await paymentFromMercadoPago(env, paymentId);
-    await confirmMercadoPagoPayment(env, payment);
+    await syncMercadoPagoPayment(env, payment);
   } catch (caught) {
     console.error("Falha ao processar webhook Mercado Pago:", caught);
   }
@@ -371,8 +414,8 @@ async function handlePaymentReturn(request, env) {
   const paymentId = url.searchParams.get("payment_id") || url.searchParams.get("collection_id");
   try {
     const payment = await paymentFromMercadoPago(env, paymentId);
-    const confirmed = await confirmMercadoPagoPayment(env, payment);
-    if (confirmed || payment?.status === "approved") {
+    const confirmed = await syncMercadoPagoPayment(env, payment);
+    if (confirmed.approved || payment?.status === "approved") {
       return Response.redirect(whatsappConfirmationUrl(clean(payment.external_reference, 80)), 302);
     }
   } catch (caught) {
@@ -403,8 +446,12 @@ async function registerForEvent(request, env) {
   if (data?.privacy_accepted !== true) {
     return error("É necessário autorizar o tratamento dos dados da inscrição.");
   }
+
   const event = await currentEvent(env);
   if (event.status === "soldout") return error("As inscrições deste evento estão encerradas.", 409);
+  const originalAmountCents = eventAmountCents(event.price);
+  if (!originalAmountCents) return error("O valor do próximo evento precisa ser corrigido pela DOGFIT.", 503);
+
   const customer = await customerFromRequest(request, env);
   if (!customer) {
     return error(
@@ -416,6 +463,7 @@ async function registerForEvent(request, env) {
   if (email !== customer.email) {
     return error("Use na inscrição o mesmo e-mail confirmado da sua conta DOGFIT.", 409, "ACCOUNT_EMAIL_MISMATCH");
   }
+
   const duplicate = await env.DB.prepare(`
     SELECT id FROM event_registrations
     WHERE lower(email) = ?
@@ -427,6 +475,20 @@ async function registerForEvent(request, env) {
   if (duplicate) {
     return error("Já existe uma pré-inscrição ativa com este e-mail para este evento.", 409, "DUPLICATE_REGISTRATION");
   }
+
+  const requestedReferralCode = cleanReferralCode(data?.referral_code);
+  let referralValidation = null;
+  if (requestedReferralCode) {
+    referralValidation = await validateReferralCode(env, requestedReferralCode, {
+      customerId: customer.id,
+      email,
+      phone: data.phone,
+      sourceType: "event",
+      originalAmountCents,
+      otherDiscountCents: 0
+    });
+  }
+
   let code = registrationCode();
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -439,7 +501,7 @@ async function registerForEvent(request, env) {
         dog_count: dogCount,
         sociability
       };
-      await env.DB.prepare(`
+      const insertResult = await env.DB.prepare(`
         INSERT INTO event_registrations (
           registration_code, customer_id, event_title, event_date, event_time,
           event_location, event_price, full_name, birth_date, phone, email,
@@ -452,10 +514,52 @@ async function registerForEvent(request, env) {
         clean(data.phone, 30), email, clean(data.dog_name, 120),
         clean(data.dog_breed, 120), dogCount, sociability
       ).run();
+
+      let referral = null;
+      let appliedReferral = referralValidation?.valid ? referralValidation : null;
+      if (appliedReferral) {
+        try {
+          referral = await createReferral(env, {
+            setting: appliedReferral.setting,
+            customerId: customer.id,
+            email,
+            phone: data.phone,
+            sourceType: "event",
+            sourceReference: code,
+            eventRegistrationId: insertResult.meta.last_row_id,
+            originalAmountCents,
+            discountAmountCents: appliedReferral.discount_amount_cents
+          });
+        } catch (referralError) {
+          if (String(referralError).includes("REFERRAL_CUSTOMER_LIMIT")) {
+            appliedReferral = null;
+            referralValidation = {
+              valid: false,
+              code: requestedReferralCode,
+              message: "Este cupom de indicação já atingiu o limite de uso para este cliente. A inscrição seguirá sem o desconto."
+            };
+          } else {
+            throw referralError;
+          }
+        }
+      }
+
+      const payableCents = referral ? Number(referral.final_amount_cents) : originalAmountCents;
       let preference;
       try {
-        preference = await createPaymentPreference(request, env, registration, event);
+        preference = await createPaymentPreference(
+          request,
+          env,
+          registration,
+          event,
+          payableCents,
+          referral?.code_snapshot || ""
+        );
       } catch (paymentError) {
+        if (referral) {
+          await env.DB.prepare("DELETE FROM partner_referrals WHERE id = ? AND payment_status = 'pending'")
+            .bind(referral.id).run();
+        }
         await env.DB.prepare("DELETE FROM event_registrations WHERE registration_code = ?")
           .bind(code).run();
         if (String(paymentError).includes("NOT_CONFIGURED")) {
@@ -466,11 +570,25 @@ async function registerForEvent(request, env) {
         }
         return error("Não foi possível abrir o pagamento. Tente novamente.", 502);
       }
+
       return json({
         ok: true,
         registration_code: code,
         payment_url: preference.init_point,
-        message: "Pré-inscrição realizada com sucesso!"
+        message: referral
+          ? "Indicação registrada com sucesso. A comissão do parceiro será contabilizada após a confirmação do pagamento."
+          : "Pré-inscrição realizada com sucesso!",
+        referral: referral ? {
+          applied: true,
+          code: referral.code_snapshot,
+          partner_name: referral.partner_name_snapshot,
+          original_amount_cents: referral.original_amount_cents,
+          discount_amount_cents: referral.discount_amount_cents,
+          final_amount_cents: referral.final_amount_cents
+        } : {
+          applied: false,
+          warning: referralValidation && !referralValidation.valid ? referralValidation.message : ""
+        }
       }, 201);
     } catch (caught) {
       if (!String(caught).includes("UNIQUE") || attempt === 2) throw caught;
@@ -479,6 +597,7 @@ async function registerForEvent(request, env) {
   }
   return error("Não foi possível gerar a pré-inscrição.", 500);
 }
+
 
 async function registerCustomer(request, env) {
   const data = await body(request);
@@ -761,19 +880,24 @@ async function deleteAdminCustomer(env, id) {
   const results = await env.DB.batch([
     env.DB.prepare("DELETE FROM customer_email_verifications WHERE customer_id = ?").bind(id),
     env.DB.prepare("DELETE FROM customer_sessions WHERE customer_id = ?").bind(id),
+    env.DB.prepare(`
+      UPDATE partner_referrals SET customer_id = NULL, customer_email = '', customer_phone = '',
+        updated_at = datetime('now')
+      WHERE customer_id = ? OR lower(customer_email) = lower(?)
+    `).bind(id, customer.email),
     env.DB.prepare("DELETE FROM event_registrations WHERE customer_id = ? OR lower(email) = lower(?)")
       .bind(id, customer.email),
     env.DB.prepare("UPDATE club_members SET customer_id = NULL WHERE customer_id = ?").bind(id),
     env.DB.prepare("DELETE FROM customer_accounts WHERE id = ?").bind(id)
   ]);
 
-  const accountDelete = results[4];
+  const accountDelete = results[5];
   if (!accountDelete?.meta?.changes) return error("Conta de cliente não encontrada.", 404);
   return json({
     ok: true,
     deleted_customer_id: id,
     deleted_email: customer.email,
-    deleted_registrations: Number(results[2]?.meta?.changes || 0)
+    deleted_registrations: Number(results[3]?.meta?.changes || 0)
   });
 }
 
@@ -783,11 +907,16 @@ async function listAdminRegistrations(request, env) {
   const status = clean(url.searchParams.get("status"), 20);
   const like = `%${query}%`;
   const { results } = await env.DB.prepare(`
-    SELECT * FROM event_registrations
-    WHERE (? = '' OR full_name LIKE ? OR email LIKE ? OR phone LIKE ? OR
-      dog_name LIKE ? OR registration_code LIKE ?)
-      AND (? = '' OR payment_status = ?)
-    ORDER BY created_at DESC LIMIT 500
+    SELECT r.*, pr.code_snapshot AS referral_code, pr.partner_name_snapshot AS referral_partner_name,
+      pr.original_amount_cents AS referral_original_cents, pr.discount_amount_cents AS referral_discount_cents,
+      pr.final_amount_cents AS referral_final_cents, pr.commission_amount_cents AS referral_commission_cents,
+      pr.commission_status AS referral_commission_status
+    FROM event_registrations r
+    LEFT JOIN partner_referrals pr ON pr.source_type = 'event' AND pr.source_reference = r.registration_code
+    WHERE (? = '' OR r.full_name LIKE ? OR r.email LIKE ? OR r.phone LIKE ? OR
+      r.dog_name LIKE ? OR r.registration_code LIKE ?)
+      AND (? = '' OR r.payment_status = ?)
+    ORDER BY r.created_at DESC LIMIT 500
   `).bind(query, like, like, like, like, like, status, status).all();
   return json(results);
 }
@@ -797,20 +926,35 @@ async function updateAdminRegistration(request, env, id) {
   const status = ["pending", "paid", "cancelled"].includes(data?.payment_status)
     ? data.payment_status : null;
   if (!status) return error("Status inválido.");
-  const result = await env.DB.prepare(`
+  const current = await env.DB.prepare("SELECT * FROM event_registrations WHERE id = ?").bind(id).first();
+  if (!current) return error("Inscrição não encontrada.", 404);
+  await env.DB.prepare(`
     UPDATE event_registrations SET payment_status = ?, notes = ?,
       updated_at = datetime('now') WHERE id = ?
   `).bind(status, clean(data.notes, 1000), id).run();
-  if (!result.meta.changes) return error("Inscrição não encontrada.", 404);
+
+  await syncReferralPaymentBySource(env, {
+    sourceType: "event",
+    sourceReference: current.registration_code,
+    paymentStatus: status,
+    paymentProvider: status === "paid" ? "manual" : "",
+    paidAmountCents: undefined
+  });
+
   return json(await env.DB.prepare("SELECT * FROM event_registrations WHERE id = ?").bind(id).first());
 }
 
 async function deleteAdminRegistration(env, id) {
+  const current = await env.DB.prepare("SELECT registration_code FROM event_registrations WHERE id = ?")
+    .bind(id).first();
+  if (!current) return error("Inscrição não encontrada.", 404);
+  await cancelReferralBySource(env, "event", current.registration_code);
   const result = await env.DB.prepare("DELETE FROM event_registrations WHERE id = ?")
     .bind(id).run();
   if (!result.meta.changes) return error("Inscrição não encontrada.", 404);
   return json({ ok: true });
 }
+
 
 export async function handlePublicEvent({ request, env, ctx, path, method }) {
   if (path === "/api/events/register" && method === "POST") {

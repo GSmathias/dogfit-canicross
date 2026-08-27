@@ -173,8 +173,20 @@ const registrationSuccess = document.getElementById("registrationSuccess");
 const registrationError = document.getElementById("registrationError");
 const registrationSubmit = document.getElementById("registrationSubmit");
 const registrationPasswordField = document.getElementById("registrationPasswordField");
+const registrationReferralCode = document.getElementById("registrationReferralCode");
+const registrationReferralApply = document.getElementById("registrationReferralApply");
+const registrationReferralMessage = document.getElementById("registrationReferralMessage");
+const registrationReferralSummary = document.getElementById("registrationReferralSummary");
+const registrationReferralPartner = document.getElementById("registrationReferralPartner");
+const registrationReferralAppliedCode = document.getElementById("registrationReferralAppliedCode");
+const registrationReferralRule = document.getElementById("registrationReferralRule");
+const registrationReferralOriginal = document.getElementById("registrationReferralOriginal");
+const registrationReferralDiscount = document.getElementById("registrationReferralDiscount");
+const registrationReferralFinal = document.getElementById("registrationReferralFinal");
+const registrationReferralSuccess = document.getElementById("registrationReferralSuccess");
 let registrationAuthenticated = false;
 let pendingRegistrationData = null;
+let registrationReferralPreview = null;
 
 function setRegistrationOpen(open) {
   if (!registrationModal) return;
@@ -204,6 +216,95 @@ function setRegistrationAuthenticated(authenticated) {
     if (registrationAuthenticated) password.value = "";
   }
   if (email) email.readOnly = registrationAuthenticated;
+}
+
+function referralMoney(cents) {
+  return (Number(cents || 0) / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  });
+}
+
+function normalizeReferralInput(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, "")
+    .slice(0, 32);
+}
+
+function clearRegistrationReferral(message = "", error = false) {
+  registrationReferralPreview = null;
+  if (registrationReferralSummary) registrationReferralSummary.hidden = true;
+  if (registrationReferralMessage) {
+    registrationReferralMessage.textContent = message;
+    registrationReferralMessage.classList.toggle("is-error", error);
+    registrationReferralMessage.classList.remove("is-success");
+  }
+}
+
+async function validateRegistrationReferral({ quietEmpty = false } = {}) {
+  if (!registrationReferralCode) return null;
+  const code = normalizeReferralInput(registrationReferralCode.value);
+  registrationReferralCode.value = code;
+  if (!code) {
+    clearRegistrationReferral(quietEmpty ? "" : "Digite um código para validar.", !quietEmpty);
+    return null;
+  }
+
+  if (registrationReferralApply) {
+    registrationReferralApply.disabled = true;
+    registrationReferralApply.textContent = "VALIDANDO...";
+  }
+  if (registrationReferralMessage) {
+    registrationReferralMessage.textContent = "Validando cupom de indicação...";
+    registrationReferralMessage.classList.remove("is-error", "is-success");
+  }
+
+  try {
+    const result = await registrationRequest("/api/referrals/validate", {
+      method: "POST",
+      body: JSON.stringify({
+        code,
+        source_type: "event",
+        email: registrationForm?.elements?.email?.value || "",
+        phone: registrationForm?.elements?.phone?.value || ""
+      })
+    });
+
+    if (!result.valid) {
+      clearRegistrationReferral(result.message || "Cupom inválido ou indisponível. Verifique o código informado.", true);
+      return result;
+    }
+
+    registrationReferralPreview = result;
+    if (registrationReferralPartner) registrationReferralPartner.textContent = result.partner_name || "Parceiro DOGFIT";
+    if (registrationReferralAppliedCode) registrationReferralAppliedCode.textContent = result.code || code;
+    if (registrationReferralRule) {
+      registrationReferralRule.textContent = result.discount_type === "percentage"
+        ? `${Number(result.discount_percentage || 0).toLocaleString("pt-BR")}%`
+        : referralMoney(result.discount_fixed_cents);
+    }
+    if (registrationReferralOriginal) registrationReferralOriginal.textContent = referralMoney(result.original_amount_cents);
+    if (registrationReferralDiscount) registrationReferralDiscount.textContent = `- ${referralMoney(result.discount_amount_cents)}`;
+    if (registrationReferralFinal) registrationReferralFinal.textContent = referralMoney(result.final_amount_cents);
+    if (registrationReferralSummary) registrationReferralSummary.hidden = false;
+    if (registrationReferralMessage) {
+      registrationReferralMessage.textContent = result.message || `Cupom ${code} aplicado.`;
+      registrationReferralMessage.classList.remove("is-error");
+      registrationReferralMessage.classList.add("is-success");
+    }
+    try { sessionStorage.setItem("dogfit_referral_code", result.code || code); } catch {}
+    return result;
+  } catch (caught) {
+    clearRegistrationReferral("Não foi possível validar o cupom agora. Você ainda pode continuar a pré-inscrição sem ele.", true);
+    return null;
+  } finally {
+    if (registrationReferralApply) {
+      registrationReferralApply.disabled = false;
+      registrationReferralApply.textContent = "APLICAR";
+    }
+  }
 }
 
 async function registrationRequest(url, options = {}) {
@@ -259,10 +360,24 @@ async function finishEventRegistration(data) {
   if (!result.payment_url) throw new Error("O pagamento não foi disponibilizado. Tente novamente.");
   document.getElementById("registrationCode").textContent = result.registration_code;
   document.getElementById("registrationPaymentLink").href = result.payment_url;
+  if (registrationReferralSuccess) {
+    if (result.referral?.applied) {
+      registrationReferralSuccess.hidden = false;
+      registrationReferralSuccess.textContent = `Cupom ${result.referral.code} aplicado por ${result.referral.partner_name}: ${referralMoney(result.referral.discount_amount_cents)} de desconto. Valor final ${referralMoney(result.referral.final_amount_cents)}. A comissão do parceiro será contabilizada após a confirmação do pagamento.`;
+    } else if (result.referral?.warning) {
+      registrationReferralSuccess.hidden = false;
+      registrationReferralSuccess.textContent = result.referral.warning;
+    } else {
+      registrationReferralSuccess.hidden = true;
+      registrationReferralSuccess.textContent = "";
+    }
+  }
   showRegistrationView("success");
   registrationSuccess?.scrollIntoView({ block: "start" });
   pendingRegistrationData = null;
   registrationForm.reset();
+  registrationReferralPreview = null;
+  try { sessionStorage.removeItem("dogfit_referral_code"); } catch {}
   setTimeout(() => location.assign(result.payment_url), 1200);
 }
 
@@ -327,13 +442,16 @@ async function ensureRegistrationAccount(data) {
   return false;
 }
 
-document.getElementById("openRegistration")?.addEventListener("click", async () => {
+async function openRegistrationFlow() {
   showRegistrationView("form");
   if (registrationError) registrationError.textContent = "";
   if (registrationVerifyError) registrationVerifyError.textContent = "";
   setRegistrationOpen(true);
   await prefillRegistration();
-});
+  if (registrationReferralCode?.value) await validateRegistrationReferral({ quietEmpty: true });
+}
+
+document.getElementById("openRegistration")?.addEventListener("click", openRegistrationFlow);
 
 document.querySelectorAll("[data-close-registration]").forEach(button => {
   button.addEventListener("click", () => setRegistrationOpen(false));
@@ -342,6 +460,20 @@ document.querySelectorAll("[data-close-registration]").forEach(button => {
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && registrationModal?.classList.contains("is-open")) {
     setRegistrationOpen(false);
+  }
+});
+
+registrationReferralCode?.addEventListener("input", () => {
+  const normalized = normalizeReferralInput(registrationReferralCode.value);
+  if (registrationReferralCode.value !== normalized) registrationReferralCode.value = normalized;
+  if (registrationReferralPreview?.code !== normalized) clearRegistrationReferral();
+});
+
+registrationReferralApply?.addEventListener("click", () => validateRegistrationReferral());
+
+registrationReferralCode?.addEventListener("blur", () => {
+  if (registrationReferralCode.value && !registrationReferralPreview) {
+    validateRegistrationReferral({ quietEmpty: true });
   }
 });
 
@@ -415,4 +547,20 @@ registrationBackToForm?.addEventListener("click", () => {
   registrationError.textContent = "Confira seus dados e envie novamente quando estiver pronto.";
 });
 
-prefillRegistration();
+async function initializeRegistrationFlow() {
+  const params = new URLSearchParams(location.search);
+  const urlReferral = normalizeReferralInput(params.get("ref"));
+  let savedReferral = "";
+  try { savedReferral = normalizeReferralInput(sessionStorage.getItem("dogfit_referral_code")); } catch {}
+  const initialReferral = urlReferral || savedReferral;
+  if (registrationReferralCode && initialReferral) registrationReferralCode.value = initialReferral;
+
+  const shouldOpen = location.pathname.replace(/\/+$/, "") === "/pre-inscricao" || Boolean(urlReferral);
+  if (shouldOpen) {
+    await openRegistrationFlow();
+  } else {
+    await prefillRegistration();
+  }
+}
+
+initializeRegistrationFlow();
