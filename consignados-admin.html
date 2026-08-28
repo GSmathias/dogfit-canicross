@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Consignados | DOGFIT CANICROSS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="css/consignados-admin.css">
+</head>
+<body>
+  <div class="admin-shell">
+    <aside class="sidebar">
+      <a class="admin-brand" href="/admin"><strong>DOGFIT</strong><span>CONSIGNADOS</span></a>
+      <nav class="admin-nav consignment-nav">
+        <button class="nav-item active" data-view="overview">Visão Geral</button>
+        <button class="nav-item" data-view="stock">Estoque por Parceiro</button>
+        <button class="nav-item" data-view="remittances">Remessas</button>
+        <button class="nav-item" data-view="movements">Movimentações</button>
+        <button class="nav-item" data-view="commissions">Comissões</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <a href="/admin">← Administração do site</a>
+        <a href="/club-admin">Clube e parceiros ↗</a>
+        <a href="/inscricoes-admin">Inscrições ↗</a>
+        <a href="/" target="_blank">Abrir site ↗</a>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <header class="topbar">
+        <div><p class="eyebrow">DOGFIT CANICROSS</p><h1 id="viewTitle">Consignados</h1></div>
+        <div class="topbar-actions">
+          <span class="mode-badge">D1 protegido</span>
+          <button class="btn btn-primary top-new-remittance" type="button" data-action="new-remittance">+ Nova Remessa</button>
+          <button id="mobileMenu" class="mobile-menu" type="button">Menu</button>
+        </div>
+      </header>
+
+      <section id="overviewView" class="consignment-view active">
+        <div class="notice"><strong>Controle de consignação.</strong> Remessas, vendas, devoluções, reposições e comissões ficam registradas sem apagar o histórico financeiro.</div>
+        <div class="stats-grid consignment-stats">
+          <article class="stat-card"><span>Parceiros ativos</span><strong id="statActivePartners">0</strong><small>com estoque consignado</small></article>
+          <article class="stat-card"><span>Produtos em loja</span><strong id="statTotalUnits">0</strong><small>unidades consignadas</small></article>
+          <article class="stat-card"><span>Valor consignado</span><strong id="statCurrentValue">R$ 0</strong><small>estoque atual nos parceiros</small></article>
+          <article class="stat-card"><span>Vendido no mês</span><strong id="statMonthSales">R$ 0</strong><small>vendas registradas</small></article>
+          <article class="stat-card"><span>Comissão pendente</span><strong id="statPendingCommission">R$ 0</strong><small>a repassar</small></article>
+          <article class="stat-card"><span>Líquido DOGFIT</span><strong id="statDogfitNet">R$ 0</strong><small>no período atual</small></article>
+          <article class="stat-card"><span>Reposição</span><strong id="statLowStock">0</strong><small>itens no mínimo ou abaixo</small></article>
+        </div>
+        <div class="quick-grid consignment-quick">
+          <button class="quick-card" data-action="new-remittance"><span>+</span><div><strong>Nova remessa</strong><small>Enviar vários produtos</small></div></button>
+          <button class="quick-card" data-action="new-sale"><span>R$</span><div><strong>Registrar venda</strong><small>Baixa + comissão automática</small></div></button>
+          <button class="quick-card" data-action="new-restock"><span>↻</span><div><strong>Repor estoque</strong><small>Adicionar unidades</small></div></button>
+          <button class="quick-card" data-action="new-return"><span>↩</span><div><strong>Registrar devolução</strong><small>Retorno para a DOGFIT</small></div></button>
+        </div>
+        <div class="section-toolbar alert-heading"><div><h2>Alertas de estoque</h2><p>Itens zerados ou abaixo do mínimo configurado.</p></div></div>
+        <div id="stockAlerts" class="alert-list"></div>
+      </section>
+
+      <section id="stockView" class="consignment-view">
+        <div class="section-toolbar">
+          <div><h2>Estoque por parceiro</h2><p>Enviado + reposto − vendido − devolvido = estoque atual.</p></div>
+          <div class="toolbar-actions"><button class="btn btn-ghost" id="partnerSettingsBtn" type="button">Configurar parceiro</button><button class="btn btn-primary" data-action="new-sale" type="button">Registrar Venda</button></div>
+        </div>
+        <div class="filter-grid stock-filters">
+          <select id="stockPartnerFilter"><option value="">Todos os parceiros</option></select>
+          <select id="stockProductFilter"><option value="">Todos os produtos</option></select>
+          <input id="stockSearch" placeholder="Buscar produto, variação ou parceiro...">
+        </div>
+        <div id="stockPartnerSummary" class="partner-summary hidden"></div>
+        <div class="table-scroll">
+          <table class="data-table stock-table">
+            <thead><tr><th>Parceiro</th><th>Produto</th><th>Variação</th><th>Enviado</th><th>Reposto</th><th>Vendido</th><th>Devolvido</th><th>Em loja</th><th>Preço</th><th>Comissão</th><th>Ações</th></tr></thead>
+            <tbody id="stockTable"><tr><td colspan="11">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+        <div id="stockCards" class="mobile-data-cards"></div>
+      </section>
+
+      <section id="remittancesView" class="consignment-view">
+        <div class="section-toolbar"><div><h2>Remessas</h2><p>Histórico completo do que foi enviado para cada parceiro.</p></div><button class="btn btn-primary" data-action="new-remittance" type="button">+ Nova Remessa</button></div>
+        <div class="filter-grid four-cols">
+          <select id="remittancePartnerFilter"><option value="">Todos os parceiros</option></select>
+          <select id="remittanceStatusFilter"><option value="">Todos os status</option><option value="ATIVA">Ativas</option><option value="ENCERRADA">Encerradas</option><option value="CANCELADA">Canceladas</option></select>
+          <input id="remittanceFrom" type="date">
+          <input id="remittanceTo" type="date">
+          <input class="filter-wide" id="remittanceSearch" placeholder="Buscar código ou parceiro...">
+        </div>
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Código</th><th>Data</th><th>Parceiro</th><th>Itens</th><th>Unidades</th><th>Valor consignado</th><th>Status</th><th>Ação</th></tr></thead><tbody id="remittancesTable"><tr><td colspan="8">Carregando...</td></tr></tbody></table></div>
+      </section>
+
+      <section id="movementsView" class="consignment-view">
+        <div class="section-toolbar"><div><h2>Movimentações</h2><p>Nenhuma movimentação financeira é apagada; estornos ficam registrados.</p></div><button class="btn btn-ghost" id="newAdjustmentBtn" type="button">Ajustar estoque</button></div>
+        <div class="filter-grid five-cols">
+          <select id="movementPartnerFilter"><option value="">Todos os parceiros</option></select>
+          <select id="movementProductFilter"><option value="">Todos os produtos</option></select>
+          <select id="movementTypeFilter"><option value="">Todos os tipos</option><option>ENVIADO</option><option>VENDA</option><option>REPOSICAO</option><option>DEVOLUCAO</option><option>AJUSTE</option><option>ESTORNO_VENDA</option></select>
+          <input id="movementFrom" type="date">
+          <input id="movementTo" type="date">
+        </div>
+        <div class="table-scroll"><table class="data-table movements-table"><thead><tr><th>Data</th><th>Parceiro</th><th>Produto</th><th>Variação</th><th>Tipo</th><th>Qtd.</th><th>Valor</th><th>Comissão</th><th>Responsável</th><th>Observação</th><th>Ação</th></tr></thead><tbody id="movementsTable"><tr><td colspan="11">Carregando...</td></tr></tbody></table></div>
+      </section>
+
+      <section id="commissionsView" class="consignment-view">
+        <div class="section-toolbar"><div><h2>Comissões</h2><p>Fechamentos preservam vendas, comissão do parceiro e líquido DOGFIT.</p></div><button class="btn btn-primary" id="generateSettlementBtn" type="button">Gerar fechamento</button></div>
+        <div class="filter-grid four-cols commission-filters">
+          <select id="commissionPartnerFilter"><option value="">Todos os parceiros</option></select>
+          <input id="commissionFrom" type="date">
+          <input id="commissionTo" type="date">
+          <select id="settlementStatusFilter"><option value="">Todos os fechamentos</option><option value="PENDENTE">Pendentes</option><option value="PAGO">Pagos</option><option value="CANCELADO">Cancelados</option></select>
+        </div>
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Parceiro</th><th>Vendas</th><th>Total vendido</th><th>Comissão média</th><th>Comissão total</th><th>Pendente</th><th>Pago</th><th>DOGFIT</th></tr></thead><tbody id="commissionSummaryTable"><tr><td colspan="8">Carregando...</td></tr></tbody></table></div>
+        <div class="section-toolbar settlements-heading"><div><h2>Fechamentos</h2><p>Após o Pix, marque o fechamento como pago. O histórico não é excluído.</p></div></div>
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Código</th><th>Parceiro</th><th>Período</th><th>Vendas</th><th>Total vendido</th><th>Comissão</th><th>DOGFIT</th><th>Status</th><th>Pago em</th><th>Ações</th></tr></thead><tbody id="settlementsTable"><tr><td colspan="10">Carregando...</td></tr></tbody></table></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="remittanceDialog" class="consignment-dialog wide-dialog">
+    <form id="remittanceForm" method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow">CONSIGNAÇÃO</p><h3>Nova Remessa</h3></div><button class="icon-btn" type="button" data-dialog-close="remittanceDialog">×</button></div>
+      <div class="form-grid">
+        <label class="field"><span>Parceiro</span><select id="remittancePartner" required></select></label>
+        <label class="field"><span>Data</span><input id="remittanceDate" type="date" required></label>
+        <label class="field field-wide"><span>Observações</span><textarea id="remittanceNotes" rows="2" maxlength="1000"></textarea></label>
+      </div>
+      <div class="item-editor-head"><div><strong>Produtos da remessa</strong><small>Preço, comissão e mínimo ficam registrados como fotografia histórica da remessa.</small></div><button class="btn btn-ghost" id="addRemittanceItem" type="button">+ Adicionar produto</button></div>
+      <div id="remittanceItems" class="remittance-items"></div>
+      <div class="remittance-total"><span>Valor total consignado</span><strong id="remittanceTotal">R$ 0,00</strong></div>
+      <div class="dialog-actions"><button class="btn btn-ghost" type="button" data-dialog-close="remittanceDialog">Cancelar</button><button class="btn btn-primary" type="submit">Criar remessa</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="movementDialog" class="consignment-dialog">
+    <form id="movementForm" method="dialog">
+      <input id="movementMode" type="hidden">
+      <div class="dialog-head"><div><p class="eyebrow">MOVIMENTAÇÃO</p><h3 id="movementDialogTitle">Registrar venda</h3></div><button class="icon-btn" type="button" data-dialog-close="movementDialog">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Parceiro</span><select id="movementPartner" required></select></label>
+        <label class="field"><span>Produto</span><select id="movementProduct" required></select></label>
+        <label class="field"><span>Variação / tamanho</span><select id="movementVariation"></select></label>
+        <label class="field"><span>Quantidade</span><input id="movementQuantity" type="number" min="1" value="1" required></label>
+        <label class="field"><span>Data</span><input id="movementDate" type="date" required></label>
+        <label class="field" id="saleValueField"><span>Valor total da venda (R$)</span><input id="movementSaleValue" inputmode="decimal" placeholder="230,00"></label>
+        <label class="field field-wide"><span id="movementNotesLabel">Observação</span><textarea id="movementNotes" rows="3" maxlength="1000"></textarea></label>
+      </div>
+      <div id="saleCalculation" class="sale-calculation hidden"></div>
+      <div class="dialog-actions"><button class="btn btn-ghost" type="button" data-dialog-close="movementDialog">Cancelar</button><button class="btn btn-primary" type="submit">Confirmar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="adjustmentDialog" class="consignment-dialog">
+    <form id="adjustmentForm" method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow">AUDITORIA</p><h3>Ajustar estoque</h3></div><button class="icon-btn" type="button" data-dialog-close="adjustmentDialog">×</button></div>
+      <div class="notice compact-notice"><strong>Use apenas para correções.</strong> Informe valor positivo para adicionar e negativo para retirar. O ajuste fica no histórico.</div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Parceiro</span><select id="adjustmentPartner" required></select></label>
+        <label class="field"><span>Produto</span><select id="adjustmentProduct" required></select></label>
+        <label class="field"><span>Variação</span><select id="adjustmentVariation"></select></label>
+        <label class="field"><span>Ajuste de quantidade</span><input id="adjustmentDelta" type="number" step="1" placeholder="Ex.: -1 ou 2" required></label>
+        <label class="field"><span>Data</span><input id="adjustmentDate" type="date" required></label>
+        <label class="field field-wide"><span>Motivo obrigatório</span><textarea id="adjustmentNotes" rows="3" required maxlength="1000"></textarea></label>
+      </div>
+      <div class="dialog-actions"><button class="btn btn-ghost" type="button" data-dialog-close="adjustmentDialog">Cancelar</button><button class="btn btn-primary" type="submit">Registrar ajuste</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="partnerSettingsDialog" class="consignment-dialog">
+    <form id="partnerSettingsForm" method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow">PARCEIRO</p><h3>Configuração de consignação</h3></div><button class="icon-btn" type="button" data-dialog-close="partnerSettingsDialog">×</button></div>
+      <input id="partnerSettingsId" type="hidden">
+      <div id="partnerSettingsIdentity" class="partner-identity"></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Nome do responsável</span><input id="partnerResponsible" maxlength="160"></label>
+        <label class="field"><span>Comissão padrão (%)</span><input id="partnerCommission" inputmode="decimal" value="30"></label>
+        <label class="field"><span>Alerta mínimo padrão</span><input id="partnerThreshold" type="number" min="0" value="1"></label>
+        <label class="toggle-field field-wide"><input id="partnerConsignmentEnabled" type="checkbox"><span>Consignação ativa para este parceiro</span></label>
+        <label class="field field-wide"><span>Observações da consignação</span><textarea id="partnerConsignmentNotes" rows="4" maxlength="1000"></textarea></label>
+      </div>
+      <div class="dialog-actions"><button class="btn btn-ghost" type="button" data-dialog-close="partnerSettingsDialog">Cancelar</button><button class="btn btn-primary" type="submit">Salvar configuração</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="remittanceDetailDialog" class="consignment-dialog wide-dialog">
+    <div class="dialog-head"><div><p class="eyebrow">REMESSA</p><h3 id="remittanceDetailTitle">Detalhes</h3></div><button class="icon-btn" type="button" data-dialog-close="remittanceDetailDialog">×</button></div>
+    <div id="remittanceDetailContent"></div>
+  </dialog>
+
+  <dialog id="partnerOverviewDialog" class="consignment-dialog wide-dialog">
+    <div class="dialog-head"><div><p class="eyebrow">PARCEIRO</p><h3 id="partnerOverviewTitle">Estoque e financeiro</h3></div><button class="icon-btn" type="button" data-dialog-close="partnerOverviewDialog">×</button></div>
+    <div id="partnerOverviewContent"></div>
+  </dialog>
+
+  <dialog id="settlementDialog" class="consignment-dialog">
+    <form id="settlementForm" method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow">FECHAMENTO</p><h3>Gerar fechamento</h3></div><button class="icon-btn" type="button" data-dialog-close="settlementDialog">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Parceiro</span><select id="settlementPartner" required></select></label>
+        <label class="field"><span>Período inicial</span><input id="settlementStart" type="date" required></label>
+        <label class="field"><span>Período final</span><input id="settlementEnd" type="date" required></label>
+        <label class="field field-wide"><span>Observação</span><textarea id="settlementNotes" rows="3" maxlength="1000"></textarea></label>
+      </div>
+      <div class="dialog-actions"><button class="btn btn-ghost" type="button" data-dialog-close="settlementDialog">Cancelar</button><button class="btn btn-primary" type="submit">Gerar fechamento pendente</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="paymentDialog" class="consignment-dialog">
+    <form id="paymentForm" method="dialog">
+      <input id="paymentSettlementId" type="hidden">
+      <div class="dialog-head"><div><p class="eyebrow">REPASSE</p><h3>Marcar comissão como paga</h3></div><button class="icon-btn" type="button" data-dialog-close="paymentDialog">×</button></div>
+      <div id="paymentSummary" class="payment-summary"></div>
+      <div class="form-grid">
+        <label class="field"><span>Data do pagamento</span><input id="paymentDate" type="date" required></label>
+        <label class="field field-wide"><span>Observação / referência do Pix</span><textarea id="paymentNotes" rows="3" maxlength="1000"></textarea></label>
+      </div>
+      <div class="dialog-actions"><button class="btn btn-ghost" type="button" data-dialog-close="paymentDialog">Cancelar</button><button class="btn btn-primary" type="submit">Confirmar pagamento</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+  <script src="js/consignados-admin.js"></script>
+</body>
+</html>

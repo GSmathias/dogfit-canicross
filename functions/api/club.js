@@ -898,12 +898,21 @@ async function deleteAdminRecord(env, table, id, label) {
     const history = await env.DB.prepare(`
       SELECT
         EXISTS(SELECT 1 FROM club_redemptions WHERE partner_id = ? LIMIT 1) AS has_redemptions,
-        EXISTS(SELECT 1 FROM partner_referrals WHERE partner_id = ? LIMIT 1) AS has_referrals
-    `).bind(id, id).first();
+        EXISTS(SELECT 1 FROM partner_referrals WHERE partner_id = ? LIMIT 1) AS has_referrals,
+        EXISTS(SELECT 1 FROM consignments WHERE partner_id = ? LIMIT 1) AS has_consignments,
+        EXISTS(SELECT 1 FROM consignment_movements WHERE partner_id = ? LIMIT 1) AS has_consignment_movements,
+        EXISTS(SELECT 1 FROM consignment_settlements WHERE partner_id = ? LIMIT 1) AS has_consignment_settlements
+    `).bind(id, id, id, id, id).first();
 
-    if (Number(history?.has_redemptions || 0) || Number(history?.has_referrals || 0)) {
+    if (
+      Number(history?.has_redemptions || 0) ||
+      Number(history?.has_referrals || 0) ||
+      Number(history?.has_consignments || 0) ||
+      Number(history?.has_consignment_movements || 0) ||
+      Number(history?.has_consignment_settlements || 0)
+    ) {
       await env.DB.batch([
-        env.DB.prepare("UPDATE club_partners SET active = 0 WHERE id = ?").bind(id),
+        env.DB.prepare("UPDATE club_partners SET active = 0, consignment_enabled = 0, updated_at = datetime('now') WHERE id = ?").bind(id),
         env.DB.prepare("UPDATE partner_referral_settings SET active = 0, updated_at = datetime('now') WHERE partner_id = ?").bind(id),
         env.DB.prepare("UPDATE club_benefits SET active = 0 WHERE partner_id = ?").bind(id),
         env.DB.prepare("UPDATE club_coupons SET active = 0 WHERE partner_id = ?").bind(id),

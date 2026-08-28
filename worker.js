@@ -15,6 +15,7 @@ import {
   handlePublicEvent
 } from "./functions/api/clients.js";
 import { handlePublicReferrals } from "./functions/api/referrals.js";
+import { handleAdminConsignments } from "./functions/api/consignments.js";
 
 import {
   onRequestGet as getAdminContent,
@@ -118,6 +119,15 @@ export default {
         return env.ASSETS.fetch(assetRequest(request, "/registrations-admin"));
       }
 
+      if (path === "/consignados.html" || path === "/consignados/" || path === "/consignados-admin" || path === "/consignados-admin.html" || path === "/consignados-admin/") {
+        return Response.redirect(`${url.origin}/consignados`, 302);
+      }
+
+      if (path === "/consignados") {
+        if (!isAuthorized(request, env)) return unauthorized();
+        return env.ASSETS.fetch(assetRequest(request, "/consignados-admin"));
+      }
+
       if (path === "/cliente.html" || path === "/cliente/") {
         return Response.redirect(`${url.origin}/cliente`, 302);
       }
@@ -214,6 +224,10 @@ export default {
 
         if (path.startsWith("/api/admin/club/")) {
           return handleAdminClub({ request, env, ctx, path, method });
+        }
+
+        if (path.startsWith("/api/admin/consignments")) {
+          return handleAdminConsignments({ request, env, ctx, path, method });
         }
 
         if (path.startsWith("/api/admin/registrations")) {

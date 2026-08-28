@@ -65,6 +65,21 @@ export async function onRequestDelete({ env, params }) {
     .bind(id).first();
   if (!product) return notFound("Produto não encontrado.");
 
+  const history = await env.DB.prepare(`
+    SELECT
+      EXISTS(SELECT 1 FROM consignment_items WHERE product_id = ? LIMIT 1) AS has_items,
+      EXISTS(SELECT 1 FROM consignment_movements WHERE product_id = ? LIMIT 1) AS has_movements
+  `).bind(id, id).first();
+
+  // Produto com histórico de consignação não pode desaparecer da auditoria.
+  // A ação de excluir passa a inativá-lo no catálogo, preservando remessas, vendas e fechamentos.
+  if (Number(history?.has_items || 0) || Number(history?.has_movements || 0)) {
+    await env.DB.prepare(`
+      UPDATE products SET active = 0, updated_at = datetime('now') WHERE id = ?
+    `).bind(id).run();
+    return json({ ok: true, deactivated: true, preserved_history: true });
+  }
+
   const result = await env.DB.prepare(
     "DELETE FROM products WHERE id = ?"
   ).bind(id).run();

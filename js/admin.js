@@ -533,15 +533,15 @@ $("productForm").addEventListener("submit", async e => {
 
 async function removeProduct(id) {
   const p = products.find(x => String(x.id) === String(id));
-  if (!confirm(`Excluir definitivamente "${p?.name || "este produto"}"? O registro será apagado do banco e a imagem enviada pelo painel será removida do R2.`)) return;
+  if (!confirm(`Excluir "${p?.name || "este produto"}"? Se ele possuir histórico de consignação, será apenas inativado para preservar remessas, vendas e comissões antigas.`)) return;
 
   try {
-    await api.deleteProduct(id);
+    const result = await api.deleteProduct(id);
     products = await api.products();
     renderProducts();
     renderDashboard();
     refreshPreview();
-    toast("Produto excluído.");
+    toast(result?.deactivated ? "Produto inativado; histórico de consignação preservado." : "Produto excluído.");
   } catch (err) {
     console.error(err);
     toast("Não foi possível excluir.", true);
